@@ -4,3 +4,9 @@ langchain-cerebras
 langchain-groq
 python-dotenv
 uvicorn
+
+# Voice Agent (Uncomment for real hardware/API integration)
+# openai             # For Whisper transcription
+# pyaudio            # For Microphone audio capture
+# SpeechRecognition  # For VAD and Mic streaming
+# pyttsx3            # For local TTS or gTTS for Google TTS

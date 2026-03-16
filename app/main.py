@@ -40,7 +40,7 @@ def predict(customer_id: str) -> dict:
         # Customer Context
         "customer_profile": {
             "name": "Rahul Sharma",
-            "tenure_months": 24,
+            "tenure_months": 10,
             "loan_type": "Personal Loan",  # "Personal Loan" | "Home Loan" | "Credit Card"
             "loan_amount": 500000,
             "relationship_value": "Medium", # "High" | "Medium" | "Low"
@@ -123,6 +123,20 @@ def Agent_pipeline():
         print(f"Justification: {result['Intervention_justification']}")
         print(f"Message Tone: {result['Message_Tone']}")
         print(f"Message: {result['Message_content']}")
+        
+        voice_res = result.get('voice_result')
+        if voice_res:
+            print("\n--- VOICE AGENT: CALL RESULT ---")
+            print(f"Outcome: {voice_res.get('outcome')}")
+            print(f"Escalate: {voice_res.get('escalate')} (Reason: {voice_res.get('escalate_reason')})")
+            print(f"Turns Taken: {voice_res.get('turns_taken')}")
+            
+            print("\nCall Memory:")
+            mem = voice_res.get('call_memory', {})
+            print(f"  - Intent History: {mem.get('intent_history')}")
+            print(f"  - Sentiment Trajectory: {mem.get('sentiment_trajectory')}")
+            print(f"  - Offer Accepted: {mem.get('offer_accepted')}")
+            print(f"  - Topics Raised: {mem.get('topics_raised')}")
     
         print("\n============================================\n")
 

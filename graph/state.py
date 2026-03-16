@@ -26,6 +26,14 @@ class customer_context(TypedDict):
         loan_type: str
         relationship_value: str
         
+class voice_result(TypedDict):
+        escalate: bool
+        escalate_reason: Optional[str]
+        outcome: str
+        turns_taken: int
+        language_detected: str
+        call_memory: dict
+
 class Main_context(TypedDict):
         total_risk_score: float
         risk_level:str
@@ -44,5 +52,8 @@ class Main_context(TypedDict):
         #Intervention
         Intervention_method: str
         Intervention_justification: str
-
+        
+        # Voice agent fields
+        voice_payload: Optional[dict]
+        voice_result: Optional[voice_result]
 

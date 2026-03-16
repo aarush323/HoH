@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from .state import Main_context
 import json
 from app.llm import get_llm
+from voice_agent.agent import run_call
 
 
 def clean_json(content: str) -> dict:
@@ -137,9 +138,6 @@ def intervention_agent(state: Main_context):
     relationship with the bank: {state['Customer_profile']['relationship_value']},
     loan_amount: {state['Customer_profile']['loan_amount']}
 
-    stress context:
-    narrative: {state['Stress_context']['narrative']}, type: {state['Stress_context']['stress_type']},severity: {state['Stress_context']['severity']}
-    from the above details , make a short concise narrative , identify the type of stress and the severity.
 
     eligible suggested interventions: {txt}
 
@@ -162,8 +160,86 @@ def intervention_agent(state: Main_context):
 
 
     return {
-        "Intervention_method": parse.get("Intervention_method", ""),
+        "Intervention_method": "payment_holiday",
         "Intervention_justification": parse.get("Intervention_justification", ""),
         "Message_Tone": parse.get("Message_Tone", ""),
         "Message_content": parse.get("Message_content", "")
     }
+
+def voice_prep_node(state: Main_context) -> dict:
+    """
+    Pure Python. Builds voice_payload from accumulated state.
+    No LLM. This is the bridge.
+    """
+    profile = state.get("Customer_profile", {})
+    stress = state.get("Stress_context", {})
+    
+    # Map intervention method to human-readable offer detail
+    OFFER_DETAILS = {
+        "payment_holiday": "a short extension on your upcoming payment",
+        "restructuring":   "a revised payment schedule",
+        "rm_call":         "a call with your relationship manager",
+        "financial_counseling": "a quick session with our financial advisor",
+        "monitor_only":    None  # no call needed
+    }
+    
+    intervention = state.get("Intervention_method", "monitor_only")
+    offer_detail = OFFER_DETAILS.get(intervention)
+    
+    if not offer_detail:
+        # monitor_only — no voice call needed
+        return {"voice_payload": None}
+    
+    # show EMI amount only for high-value customers
+    show_amount = profile.get("relationship_value") == "High"
+    
+    # max turns based on severity
+    severity = stress.get("severity", "low")
+    max_turns = 4 if severity in ["high", "very high"] else 3
+    
+    # Normally we pull tone_hint/avoid from translation, mock safely if absent
+    tone_hint = "warm and gentle"
+    avoid_topics = ["collections", "legal action"]
+    
+    payload = {
+        "customer_name": profile.get("name", "Customer").split()[0],  # first name only
+        "emi_date": "your upcoming payment date",      # comes from your data pipeline
+        "offer_type": intervention,
+        "offer_detail": offer_detail,
+        "tone": state.get("Message_Tone", "Empathetic"),
+        "message_tone": state.get("Message_Tone", "Empathetic"),
+        "stress": {
+            "narrative": stress.get("narrative", "Customer is experiencing financial stress."),
+            "severity": stress.get("severity", "Medium")
+        },
+        "tone_hints": [tone_hint],
+        "avoid_topics": avoid_topics,
+        "show_emi_amount": show_amount,
+        "max_turns": max_turns,
+        "language_hint": "english",
+        "fallback_message": "Let me connect you with someone from our team who can help."
+    }
+    
+    return {"voice_payload": payload}
+
+def voice_agent_node(state: Main_context) -> dict:
+    """
+    Calls the entire voice agent. Blocks until call is complete.
+    Returns result into state.
+    """
+    if state.get("voice_payload") is None:
+        # monitor_only path — skip call entirely
+        return {
+            "voice_result": {
+                "escalate": False,
+                "escalate_reason": "monitor_only",
+                "outcome": "no_call_needed",
+                "turns_taken": 0,
+                "language_detected": "english",
+                "call_memory": {}
+            }
+        }
+    
+    result = run_call(state["voice_payload"])
+    
+    return {"voice_result": result}
