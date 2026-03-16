@@ -19,10 +19,11 @@ def _groq_tts(text: str, temp_file: str) -> bool:
     try:
         response = client.audio.speech.create(
             model="canopylabs/orpheus-v1-english",
-            voice="leah",
+            voice="diana",
             input=text,
+            response_format="wav",
         )
-        response.stream_to_file(temp_file)
+        response.write_to_file(temp_file)
         return True
     except Exception as e:
         logger.error(f"Groq TTS failed: {e}")
@@ -52,27 +53,29 @@ async def _play_audio(temp_file: str):
         pygame.mixer.music.unload()
 
 async def _synthesize_and_play(text: str):
-    temp_file = "temp_agent_audio.mp3"
+    groq_file = "temp_agent_audio.wav"
+    edge_file = "temp_agent_audio.mp3"
 
     try:
-        success = _groq_tts(text, temp_file)
-        
-        # Fall back to Edge TTS if Groq failed (e.g. model decommissioned)
-        if not success:
-            logger.warning("Falling back to Edge TTS...")
-            success = await _synthesize_edge(text, temp_file)
+        success = _groq_tts(text, groq_file)
+        if success and os.path.exists(groq_file):
+            await _play_audio(groq_file)
+            return
 
-        if success and os.path.exists(temp_file):
-            await _play_audio(temp_file)
+        logger.warning("Falling back to Edge TTS...")
+        success = await _synthesize_edge(text, edge_file)
+        if success and os.path.exists(edge_file):
+            await _play_audio(edge_file)
         else:
             logger.error("Both TTS engines failed. No audio played.")
 
     finally:
-        if os.path.exists(temp_file):
-            try:
-                os.remove(temp_file)
-            except Exception:
-                pass
+        for f in [groq_file, edge_file]:
+            if os.path.exists(f):
+                try:
+                    os.remove(f)
+                except Exception:
+                    pass
 
 def speak(text: str):
     """
