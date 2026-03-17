@@ -5,6 +5,9 @@ import pygame
 import edge_tts
 import concurrent.futures
 from groq import Groq
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +17,7 @@ except Exception as e:
     logger.error(f"Failed to initialize pygame mixer: {e}")
 
 client = Groq()
+
 
 def _groq_tts(text: str, temp_file: str) -> bool:
     try:
@@ -29,6 +33,7 @@ def _groq_tts(text: str, temp_file: str) -> bool:
         logger.error(f"Groq TTS failed: {e}")
         return False
 
+
 async def _synthesize_edge(text: str, temp_file: str) -> bool:
     """
     Attempts to synthesize speech using Edge TTS.
@@ -42,6 +47,7 @@ async def _synthesize_edge(text: str, temp_file: str) -> bool:
         logger.error(f"Edge TTS fallback also failed: {e}")
         return False
 
+
 async def _play_audio(temp_file: str):
     """Plays the given audio file using pygame."""
     try:
@@ -52,17 +58,25 @@ async def _play_audio(temp_file: str):
     finally:
         pygame.mixer.music.unload()
 
+
+# --- CONFIGURATION ---
+# Set to 'edge' to use Edge TTS, or 'orpheus' to use Groq PlayAI TTS
+TTS_ENGINE = "edge" 
+# ---------------------
+
 async def _synthesize_and_play(text: str):
     groq_file = "temp_agent_audio.wav"
     edge_file = "temp_agent_audio.mp3"
 
     try:
-        success = _groq_tts(text, groq_file)
-        if success and os.path.exists(groq_file):
-            await _play_audio(groq_file)
-            return
+        if TTS_ENGINE == "orpheus":
+            print("ORPHEUSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS")
+            success = _groq_tts(text, groq_file)
+            if success and os.path.exists(groq_file):
+                await _play_audio(groq_file)
+                return
+            logger.warning("Orpheus TTS failed, falling back to Edge TTS...")
 
-        logger.warning("Falling back to Edge TTS...")
         success = await _synthesize_edge(text, edge_file)
         if success and os.path.exists(edge_file):
             await _play_audio(edge_file)
@@ -77,18 +91,19 @@ async def _synthesize_and_play(text: str):
                 except Exception:
                     pass
 
+
 def speak(text: str):
     """
     Synthesizes and plays text using Groq PlayAI TTS with Edge fallback.
     """
-    print(f"\n [AGENT SPEAKS]: \"{text}\" \n")
+    print(f'[AGENT → CHANNEL] "{text}"')
     logger.info(f"Agent spoke: {text}")
     try:
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
-            
+
         if loop and loop.is_running():
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 future = pool.submit(asyncio.run, _synthesize_and_play(text))
@@ -97,4 +112,3 @@ def speak(text: str):
             asyncio.run(_synthesize_and_play(text))
     except Exception as e:
         logger.error(f"TTS Failed: {e}")
-

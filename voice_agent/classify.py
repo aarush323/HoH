@@ -4,6 +4,7 @@ from app.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
+
 def clean_json(content: str) -> dict:
     content = content.strip()
     if content.startswith("```"):
@@ -13,13 +14,15 @@ def clean_json(content: str) -> dict:
     content = content.strip()
     return json.loads(content)
 
+
 def format_history(history: list) -> str:
     if not history:
         return "No conversation history yet."
     formatted = ""
     for i, turn in enumerate(history):
-        formatted += f"Turn {i+1}: {turn}\n"
+        formatted += f"Turn {i + 1}: {turn}\n"
     return formatted
+
 
 def call_llm(prompt: str) -> dict:
     try:
@@ -33,14 +36,19 @@ def call_llm(prompt: str) -> dict:
             "next_action": "continue",
             "outcome": "unresolved",
             "response": "Sorry, could you repeat that?",
-            "reasoning": "failed"
+            "reasoning": "failed",
         }
+
 
 def opening_stage(transcript, history, payload, stress):
     prompt = f"""
 You are Maya, a Barclays support agent on a proactive courtesy call.
-Customer: {payload['customer_name']}
-Background context (never say this to customer): {stress['narrative']}
+Customer: {payload["customer_name"]}
+Background context (never say this to customer): {stress["narrative"]}
+
+IMPORTANT: The background context above is for your awareness only.
+ALWAYS classify based on what the customer ACTUALLY SAID, not the background.
+If the customer says they will pay — they are CONFIDENT regardless of background.
 
 Customer just said: "{transcript}"
 
@@ -62,7 +70,7 @@ Examples of struggling:
 - "having some issues"
 - "not sure"
 - "a bit tight"
-→ Acknowledge AND say: you have a short extension option that might help.
+→ AAcknowledge AND say: you have {payload["offer_detail"]} that might help.
 → Do NOT just say "let me see what I can do" — that's vague and unhelpful.
 → One sentence acknowledgement + one sentence introducing the option.
 
@@ -83,15 +91,20 @@ Return JSON only:
     "reasoning": "str"
 }}
 """
-    return call_llm(prompt)
+    result = call_llm(prompt)
+    print(
+        f"[CLASSIFY DEBUG] transcript='{transcript}' → intent={result.get('intent')} reasoning={result.get('reasoning')}"
+    )
+    return result
+
 
 def offer_stage(transcript, history, payload, stress):
     history_text = format_history(history)
-    
+
     prompt = f"""
 You are Maya, a Barclays support agent.
-Customer: {payload['customer_name']}
-You have already offered: {payload['offer_detail']}
+Customer: {payload["customer_name"]}
+You have already offered: {payload["offer_detail"]}
 
 Conversation so far:
 {history_text}
@@ -133,12 +146,13 @@ Return JSON only:
 """
     return call_llm(prompt)
 
+
 def tips_stage(transcript, history, payload, stress):
     history_text = format_history(history)
-    
+
     prompt = f"""
 You are Maya, a Barclays support agent.
-Customer: {payload['customer_name']}
+Customer: {payload["customer_name"]}
 You have offered tips and asked if they want a financial counsellor.
 
 Conversation so far:
@@ -169,6 +183,7 @@ Return JSON only:
 }}
 """
     return call_llm(prompt)
+
 
 def run_stage(stage, transcript, history, payload, stress):
     if stage == "opening":
