@@ -4,6 +4,7 @@ langchain-cerebras
 langchain-groq
 python-dotenv
 uvicorn
+kafka-python
 
 # Voice Agent (Uncomment for real hardware/API integration)
 # openai             # For Whisper transcription
