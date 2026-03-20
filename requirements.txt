@@ -5,6 +5,16 @@ langchain-groq
 python-dotenv
 uvicorn
 kafka-python
+psycopg2-binary
+sqlalchemy
+scylla-driver
+redis
+pandas
+numpy
+scikit-learn
+lightgbm
+shap
+torch
 
 # Voice Agent (Uncomment for real hardware/API integration)
 # openai             # For Whisper transcription
