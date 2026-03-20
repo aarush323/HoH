@@ -12,6 +12,11 @@ def setup_logger(name: str) -> logging.Logger:
 
 logger = setup_logger(__name__)
 
+# Intent categories — used by trajectory and outcome logic
+NEUTRAL_INTENTS = ["question_offer", "question_other", "unclear", "tip_given"]
+POSITIVE_INTENTS = ["accepts_offer", "doing_fine"]
+NEGATIVE_INTENTS = ["declines_offer", "declines_all"]
+
 def log_guardrail_trigger(response_text: str, turn: int):
     logger.warning(f"[Guardrail Triggered] Turn {turn} | Original: '{response_text}'")
 
@@ -23,14 +28,11 @@ def update_trajectory(intent_history: list) -> str:
     last_intent = intent_history[-1]
     prev_intent = intent_history[-2]
     
-    positive_intents = ["accepts_offer"]
-    negative_intents = ["raises_dispute", "distressed", "declines_offer"]
-    
-    if prev_intent in negative_intents and last_intent in positive_intents:
+    if prev_intent in NEGATIVE_INTENTS and last_intent in POSITIVE_INTENTS:
         return "improving"
-    if prev_intent in positive_intents and last_intent in negative_intents:
+    if prev_intent in POSITIVE_INTENTS and last_intent in NEGATIVE_INTENTS:
         return "deteriorating"
-    if last_intent in negative_intents:
+    if last_intent in NEGATIVE_INTENTS:
         return "deteriorating"
     
     return "stable"
@@ -57,13 +59,17 @@ def check_trajectory(call_state: dict) -> str:
 def determine_outcome(intent_history: list) -> str:
     if not intent_history:
         return "unknown"
-    if "accepts_offer" in intent_history:
+    # Filter out neutral intents — they shouldn't drive outcome
+    meaningful = [i for i in intent_history if i not in NEUTRAL_INTENTS]
+    if not meaningful:
+        return "completed"
+    if "accepts_offer" in meaningful:
         return "accepted"
-    if "declines_offer" in intent_history:
+    if "declines_offer" in meaningful:
         return "declined"
-    if "schedule_callback" in intent_history or "needs_time" in intent_history:
+    if "schedule_callback" in meaningful or "needs_time" in meaningful:
         return "callback_requested"
-    if "raises_dispute" in intent_history or "distressed" in intent_history or "wants_alternative" in intent_history:
+    if "raises_dispute" in meaningful or "distressed" in meaningful or "wants_alternative" in meaningful:
         return "escalated"
     return "completed"
 

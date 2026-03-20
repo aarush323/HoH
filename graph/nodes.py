@@ -332,11 +332,24 @@ def voice_prep_node(state: Main_context) -> dict:
 
     # Map intervention method to human-readable offer detail
     OFFER_DETAILS = {
-        "payment_holiday": "a short extension on your upcoming payment",
-        "restructuring": "a revised payment schedule",
-        "rm_call": "a call with your relationship manager",
-        "financial_counseling": "a quick session with our financial advisor",
-        "monitor_only": None,  # no call needed
+        "payment_holiday": (
+            "a 3-month payment holiday where your EMI pauses completely — "
+            "no penalty, no missed payment recorded, payments resume automatically in month 4"
+        ),
+        "restructuring": (
+            "a revised payment schedule where we restructure your loan — "
+            "lower monthly payments spread over an extended tenure, "
+            "a specialist will walk you through the exact numbers"
+        ),
+        "rm_call": (
+            "a direct call with your relationship manager who can personalise "
+            "a solution for your specific situation — no forms, no waiting"
+        ),
+        "financial_counseling": (
+            "a session with our financial advisor who can help you build "
+            "a practical plan to manage your payments going forward"
+        ),
+        "monitor_only": None,
     }
 
     intervention = state.get("Intervention_method", "monitor_only")
@@ -351,7 +364,7 @@ def voice_prep_node(state: Main_context) -> dict:
 
     # max turns based on severity
     severity = stress.get("severity", "low")
-    max_turns = 4 if severity in ["high", "very high"] else 3
+    max_turns = 6 if severity in ["high", "very high"] else 5
 
     # Normally we pull tone_hint/avoid from translation, mock safely if absent
     tone_hint = "warm and gentle"

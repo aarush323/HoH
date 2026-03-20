@@ -41,6 +41,13 @@ def run_loop(voice_payload: dict, call_strategy: dict, call_state: dict) -> dict
         call_state["consecutive_unclear"] = 0
         call_state["transcript_history"].append(transcript["text"])
         
+        # Pass last intent for awaiting_clarification logic
+        voice_payload["last_intent"] = (
+            call_state["intent_history"][-1]
+            if call_state["intent_history"]
+            else ""
+        )
+
         # 3. Route to correct stage function
         result = run_stage(
             stage=call_state["stage"],
@@ -80,11 +87,26 @@ def run_loop(voice_payload: dict, call_strategy: dict, call_state: dict) -> dict
             call_state["exit_reason"] = result.get("intent", "unclear")
             break
             
+        if next_action == "escalate_analyst":
+            call_state["outcome"] = "accepted_restructuring"
+            call_state["exit_reason"] = "accepted_restructuring"
+            break
+
+        if next_action == "escalate_counsellor":
+            call_state["outcome"] = "counsellor_requested"
+            call_state["exit_reason"] = "requested_advisor"
+            break
+
         if next_action == "escalate_human":
-            call_state["outcome"] = result.get("outcome", "counsellor_requested")
+            # Mid-call explicit human request (e.g. "connect me to someone")
+            call_state["outcome"] = result.get("outcome", "escalated")
             call_state["exit_reason"] = "human_requested"
             break
             
+        if next_action == "continue":
+            logger.debug(f"[LOOP] Staying in stage: {call_state['stage']} | Intent: {result.get('intent')}")
+            # No stage change, just increment turn and loop
+
         if next_action == "advance_stage":
             call_state["stage"] = advance_stage(call_state["stage"])
             if call_state["stage"] == "offer_presented":
@@ -95,12 +117,21 @@ def run_loop(voice_payload: dict, call_strategy: dict, call_state: dict) -> dict
     return build_result(call_state)
 
 def build_result(call_state: dict) -> dict:
-    escalation_reasons = ["escalate_urgent", "escalate_distressed", "escalate_dispute", "unclear_streak", "human_requested"]
+    escalation_reasons = {
+        "accepted_restructuring": "Accepted offer — needs restructuring specialist",
+        "requested_advisor": "Declined offer — requested financial counsellor",
+        "human_requested": "Mid-call explicit human request",
+        "escalate_urgent": "Distressed or dispute",
+        "escalate_distressed": "Distressed or dispute",
+        "escalate_dispute": "Distressed or dispute",
+        "unclear_streak": "Too many unclear responses",
+    }
     exit_reason = call_state.get("exit_reason")
     
     return {
         "escalate": exit_reason in escalation_reasons,
         "escalate_reason": exit_reason,
+        "escalate_description": escalation_reasons.get(exit_reason),
         "outcome": call_state.get("outcome", determine_outcome(call_state["intent_history"])),
         "turns_taken": call_state["turn"],
         "language_detected": call_state.get("language_detected", "english"),

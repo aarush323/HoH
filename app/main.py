@@ -12,24 +12,30 @@ def predict(customer_id: str) -> dict:
         "customer_id": customer_id,
         "prediction_id": None,
         "observation_week": "2026-03-20",
-        "risk_score": 0.89,
+        "risk_score": 0.87,
         "risk_level": "High",
         "shap_factors": [
             {
                 "feature": "salary_delay_days",
-                "value": 4,
+                "value": 6,
                 "contribution": 0.18,
                 "direction": "+"
             },
             {
                 "feature": "savings_drawdown_pct",
-                "value": -18.5,
-                "contribution": 0.14,
+                "value": -38.5,
+                "contribution": 0.15,
                 "direction": "+"
             },
             {
                 "feature": "auto_debit_failures",
-                "value": 3,
+                "value": 2,
+                "contribution": 0.11,
+                "direction": "+"
+            },
+            {
+                "feature": "utility_payment_delay_days",
+                "value": 4,
                 "contribution": 0.09,
                 "direction": "+"
             },
@@ -38,8 +44,8 @@ def predict(customer_id: str) -> dict:
             "customer_id": customer_id,
             "name": "Rahul Sharma",
             "tenure_months": 24.0,
-            "loan_type": "Personal Loan",
-            "loan_amount": 500000.00,
+            "loan_type": "Personal Loan",   # NOT Home Loan — keeps payment_holiday eligible
+            "loan_amount": 450000.00,
             "relationship_value": "High",
             "fraud_flag": False,
             "existing_restructuring": False,
@@ -50,7 +56,6 @@ def predict(customer_id: str) -> dict:
         "timestamp": "2026-03-20T14:32:00",
         "model_version": "1.0.0",
     }
-
 def Agent_pipeline():
     graph = build_graph()
     data = predict("C00032")
