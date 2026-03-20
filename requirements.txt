@@ -1,23 +1,31 @@
+# Core Framework & API
 fastapi
-langgraph
-langchain-cerebras
-langchain-groq
-python-dotenv
 uvicorn
-kafka-python
+python-dotenv
+langgraph
+langchain
+langchain-groq
+langchain-cerebras
+groq
+
+# Database & Storage
 psycopg2-binary
 sqlalchemy
-scylla-driver
+cassandra-driver
 redis
+
+# Data Science & ML
 pandas
 numpy
 scikit-learn
 lightgbm
 shap
-torch
 
-# Voice Agent (Uncomment for real hardware/API integration)
-# openai             # For Whisper transcription
-# pyaudio            # For Microphone audio capture
-# SpeechRecognition  # For VAD and Mic streaming
-# pyttsx3            # For local TTS or gTTS for Google TTS
+# Streaming & Pipeline
+kafka-python
+
+# Voice Agent & Audio
+edge-tts
+pygame
+sounddevice
+pydub

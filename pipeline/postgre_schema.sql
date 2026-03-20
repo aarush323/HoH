@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS interventions (
     id                          BIGSERIAL PRIMARY KEY,
     customer_id                 VARCHAR(20) REFERENCES customers(customer_id),
     prediction_id               BIGINT REFERENCES model_predictions(id),
+    observation_week            DATE,
     stress_context_id           BIGINT REFERENCES stress_context(id),
     intervention_method         VARCHAR(50),
     intervention_justification  TEXT,
@@ -146,7 +147,8 @@ CREATE TABLE IF NOT EXISTS interventions (
     status                      VARCHAR(20),
     outcome                     VARCHAR(20),
     created_at                  TIMESTAMPTZ DEFAULT NOW(),
-    resolved_at                 TIMESTAMPTZ
+    resolved_at                 TIMESTAMPTZ,
+    UNIQUE (customer_id, observation_week)
 );
 
 CREATE INDEX IF NOT EXISTS idx_interventions_customer

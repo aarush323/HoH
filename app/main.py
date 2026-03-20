@@ -3,112 +3,81 @@ import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-
 from graph import build_graph
-
-# app = FastAPI(title = "PreDelinquency Engine")
+from graph.state import Main_context
 
 
 def predict(customer_id: str) -> dict:
     return {
-        # Core Risk
-        "customer_id": "CUS-9773",
-        "risk_score": 0.89,  # float 0-1
-        "risk_level": "High",  # "High" | "Medium" | "Low"
-        # SHAP Explanation
+        "customer_id": customer_id,
+        "prediction_id": None,
+        "observation_week": "2026-03-20",
+        "risk_score": 0.89,
+        "risk_level": "High",
         "shap_factors": [
             {
                 "feature": "salary_delay_days",
-                "value": 4,  # actual feature value
-                "contribution": 0.18,  # how much it pushed score up
-                "direction": "+",  # "+" hurts, "-" helps
+                "value": 4,
+                "contribution": 0.18,
+                "direction": "+"
             },
             {
-                "feature": "savings_wow_delta",
+                "feature": "savings_drawdown_pct",
                 "value": -18.5,
                 "contribution": 0.14,
-                "direction": "+",
+                "direction": "+"
             },
             {
-                "feature": "failed_autodebit_30d",
+                "feature": "auto_debit_failures",
                 "value": 3,
                 "contribution": 0.09,
-                "direction": "+",
+                "direction": "+"
             },
         ],
-        # Customer Context
         "customer_profile": {
+            "customer_id": customer_id,
             "name": "Rahul Sharma",
-            "tenure_months": 24,  # changed from 10 — unlocks restructuring
+            "tenure_months": 24.0,
             "loan_type": "Personal Loan",
-            "loan_amount": 500000,
-            "relationship_value": "High",  # changed to High — warrants a call
-            "existing_restructuring": False,
+            "loan_amount": 500000.00,
+            "relationship_value": "High",
             "fraud_flag": False,
-            "previous_payment_holiday": False,  # new field
-            "legal_npa_flag": False,  # new field
-            "kyc_lapsed": False,  # new field
+            "existing_restructuring": False,
+            "previous_payment_holiday": False,
+            "legal_npa_flag": False,
+            "kyc_lapsed": False,
         },
-        # Metadata
-        "timestamp": "2026-03-12T14:32:00",
+        "timestamp": "2026-03-20T14:32:00",
         "model_version": "1.0.0",
     }
 
-
-def prepare_agent3_input(state: dict) -> dict:
-    # hardcoded test state so we can test agent3 independently
-    state = {
-        "analyst_narrative": "Customer shows temporary liquidity stress. Salary delayed 4 days combined with 18% savings depletion and 3 failed auto-debits suggests cashflow disruption. Given 24 month clean history this appears situational rather than fundamental credit risk.",
-        "stress_type": "temporary",
-        "stress_severity": "severe",
-        "customer_profile": {
-            "tenure_months": 24,
-            "loan_type": "Personal Loan",
-            "relationship_value": "Medium",
-        },
-        "risk_score": 0.89,
-        "risk_level": "High",
-        "compliance_result": {
-            "policy_passed": True,
-            "eligible_interventions": ["payment_holiday", "rm_call"],
-        },
-    }
-
-    return {
-        "stress_context": {
-            "narrative": state["analyst_narrative"],
-            "type": state["stress_type"],
-            "severity": state["stress_severity"],
-        },
-        "customer_context": {
-            "tenure_months": state["customer_profile"]["tenure_months"],
-            "loan_type": state["customer_profile"]["loan_type"],
-            "relationship_value": state["customer_profile"]["relationship_value"],
-            "risk_score": state["risk_score"],
-            "risk_level": state["risk_level"],
-        },
-        "compliance_context": {
-            "policy_passed": state["compliance_result"]["policy_passed"],
-            "eligible_interventions": state["compliance_result"][
-                "eligible_interventions"
-            ],
-        },
-    }
-
-
 def Agent_pipeline():
     graph = build_graph()
-    data = predict("CUS-9773")
+    data = predict("C00032")
+
     initial_state: Main_context = {
+        "prediction_id": data["prediction_id"],
+        "observation_week": data["observation_week"],
         "total_risk_score": data["risk_score"],
         "risk_level": data["risk_level"],
         "Shap": data["shap_factors"],
         "Customer_profile": data["customer_profile"],
         "Stress_context": {},
-        "Customer_context": {},
+        "eligible_interventions": [],
+        "hard_stop": False,
+        "hard_stop_reason": None,
+        "Message_Tone": "",
+        "Message_content": "",
+        "Intervention_method": "",
+        "Intervention_justification": "",
+        "selected_channel": None,
+        "channel_dispatch_result": None,
+        "voice_payload": None,
+        "voice_result": None,
     }
 
     result = graph.invoke(initial_state)
+
     print("\n========== AGENT PIPELINE RESULTS ==========")
     print(f"\nRISK SCORE: {result['total_risk_score']} | LEVEL: {result['risk_level']}")
 
@@ -144,9 +113,7 @@ def Agent_pipeline():
     if voice_res:
         print("\n--- VOICE AGENT: CALL RESULT ---")
         print(f"Outcome: {voice_res.get('outcome')}")
-        print(
-            f"Escalate: {voice_res.get('escalate')} (Reason: {voice_res.get('escalate_reason')})"
-        )
+        print(f"Escalate: {voice_res.get('escalate')} (Reason: {voice_res.get('escalate_reason')})")
         print(f"Turns Taken: {voice_res.get('turns_taken')}")
 
         print("\nCall Memory:")

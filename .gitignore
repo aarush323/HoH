@@ -20,3 +20,20 @@ build/
 # IDEs
 .vscode/
 .idea/
+
+# OS generated files
+.DS_Store
+
+# Python tooling
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.nox/
+.tox/
+.ipynb_checkpoints/
+*.log
+
+# Logs and temporary files
+agent_output_fallback.log
+*.sqlite

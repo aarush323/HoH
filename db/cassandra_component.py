@@ -1,8 +1,6 @@
 import os
-import asyncio
 from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra.policies import DCAwareRoundRobinPolicy
-from cassandra.io.asyncioreactor import AsyncioConnection
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,10 +14,9 @@ profile = ExecutionProfile(
 cluster = Cluster(
     contact_points=["127.0.0.1"],
     port=9042,
-    connection_class=AsyncioConnection,
     execution_profiles={EXEC_PROFILE_DEFAULT: profile},
     protocol_version=4,
-    connect_timeout=10
+    connect_timeout=30
 )
 
 def get_session():

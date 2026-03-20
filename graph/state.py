@@ -42,6 +42,8 @@ class voice_result(TypedDict):
 
 
 class Main_context(TypedDict):
+    prediction_id: int
+    observation_week: str
     total_risk_score: float
     risk_level: str
     Shap: List[shap]

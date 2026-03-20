@@ -402,3 +402,147 @@ def voice_agent_node(state: Main_context) -> dict:
     result = run_call(state["voice_payload"])
 
     return {"voice_result": result}
+
+
+import traceback
+from datetime import datetime
+from sqlalchemy import text
+from db.postgres import get_connection
+
+def log_fallback(state: dict, error_msg: str):
+    log_file = "agent_output_fallback.log"
+    import json
+    try:
+        dump = {
+            "timestamp": datetime.now().isoformat(),
+            "error": error_msg,
+            "state": state
+        }
+        with open(log_file, "a") as f:
+            f.write(json.dumps(dump, default=str) + "\n")
+    except Exception:
+        pass
+
+
+def persist_to_db_node(state: Main_context) -> dict:
+    # Treat mock or missing prediction_id as NULL for Postgres
+    raw_pid = state.get("prediction_id")
+    prediction_id = raw_pid if raw_pid and raw_pid != 999999 else None
+
+    observation_week = state.get("observation_week")
+    if not observation_week:
+        log_fallback(state, "observation_week is missing or null.")
+        return {}
+
+    try:
+        with get_connection() as conn:
+            with conn.begin():
+                stress = state.get("Stress_context", {})
+                # Direct access to Customer_profile as it should always be present
+                customer_id = state["Customer_profile"]["customer_id"]
+
+                # Step 2: Insert into stress_context
+                result = conn.execute(text("""
+                    INSERT INTO stress_context (customer_id, prediction_id, narrative, stress_type, severity)
+                    VALUES (:cid, :pid, :narrative, :type, :severity)
+                    RETURNING id
+                """), {
+                    "cid": customer_id,
+                    "pid": prediction_id,
+                    "narrative": stress.get("narrative"),
+                    "type": stress.get("stress_type"),
+                    "severity": stress.get("severity")
+                })
+                stress_context_id = result.scalar()
+
+                # Step 3: Insert into interventions
+                hard_stop_flag = state.get("hard_stop", False)
+                initial_status = "hard_stopped" if hard_stop_flag else "dispatched"
+
+                eligible = state.get("eligible_interventions", [])
+                dispatch_res = state.get("channel_dispatch_result")
+                dispatch_json = json.dumps(dispatch_res) if dispatch_res else None
+
+                res3 = conn.execute(text("""
+                    INSERT INTO interventions (
+                        customer_id, observation_week, prediction_id, stress_context_id,
+                        intervention_method, intervention_justification, eligible_interventions,
+                        selected_channel, message_tone, message_content, channel_dispatch_result,
+                        hard_stop, hard_stop_reason, status, outcome
+                    ) VALUES (
+                        :cid, :oweek, :pid, :scid,
+                        :imethod, :ijustify, :eligible,
+                        :chan, :tone, :content, CAST(:dispatch AS JSONB),
+                        :hs, :hsr, :status, NULL
+                    )
+                    ON CONFLICT (customer_id, observation_week) DO UPDATE SET
+                        stress_context_id = EXCLUDED.stress_context_id,
+                        intervention_method = EXCLUDED.intervention_method,
+                        intervention_justification = EXCLUDED.intervention_justification,
+                        eligible_interventions = EXCLUDED.eligible_interventions,
+                        selected_channel = EXCLUDED.selected_channel,
+                        message_tone = EXCLUDED.message_tone,
+                        message_content = EXCLUDED.message_content,
+                        channel_dispatch_result = EXCLUDED.channel_dispatch_result,
+                        hard_stop = EXCLUDED.hard_stop,
+                        hard_stop_reason = EXCLUDED.hard_stop_reason,
+                        status = EXCLUDED.status,
+                        outcome = EXCLUDED.outcome,
+                        resolved_at = NULL
+                    RETURNING id
+                """), {
+                    "cid": customer_id,
+                    "oweek": observation_week,
+                    "pid": prediction_id,
+                    "scid": stress_context_id,
+                    "imethod": state.get("Intervention_method"),
+                    "ijustify": state.get("Intervention_justification"),
+                    "eligible": eligible,
+                    "chan": state.get("selected_channel"),
+                    "tone": state.get("Message_Tone"),
+                    "content": state.get("Message_content"),
+                    "dispatch": dispatch_json,
+                    "hs": hard_stop_flag,
+                    "hsr": state.get("hard_stop_reason"),
+                    "status": initial_status
+                })
+                intervention_id = res3.scalar()
+
+                # Step 4: Insert into voice_sessions (conditional)
+                vr = state.get("voice_result")
+                if vr is not None and vr.get("outcome") != "no_call_needed":
+                    mem = vr.get("call_memory")
+                    mem_json = json.dumps(mem) if mem else None
+
+                    conn.execute(text("""
+                        INSERT INTO voice_sessions (
+                            intervention_id, customer_id, escalate, escalate_reason,
+                            outcome, turns_taken, language_detected, call_memory, call_duration_seconds
+                        ) VALUES (
+                            :ivid, :cid, :esc, :escreason, :out, :turns, :lang, CAST(:mem AS JSONB), NULL
+                        )
+                    """), {
+                        "ivid": intervention_id,
+                        "cid": customer_id,
+                        "esc": vr.get("escalate"),
+                        "escreason": vr.get("escalate_reason"),
+                        "out": vr.get("outcome"),
+                        "turns": vr.get("turns_taken"),
+                        "lang": vr.get("language_detected"),
+                        "mem": mem_json
+                    })
+
+                    conn.execute(text("""
+                        UPDATE interventions
+                        SET outcome = :out, resolved_at = NOW()
+                        WHERE id = :ivid
+                    """), {
+                        "out": vr.get("outcome"),
+                        "ivid": intervention_id
+                    })
+
+    except Exception as e:
+        log_fallback(state, str(e) + "\n" + traceback.format_exc())
+        raise
+
+    return {}
