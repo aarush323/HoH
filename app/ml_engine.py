@@ -1,307 +1,301 @@
-"""
-ml_engine.py — real-model scoring + SHAP explanation layer.
-
-Exposes:
-    get_real_score(customer_id)  → float | None
-    get_real_shap(customer_id)   → dict  | None
-
-Both query Postgres for the last 12 weeks of weekly_features,
-return None when fewer than 12 rows exist, and use Redis caching.
-
-Model logic is a 1-to-1 port of the training notebooks — do NOT
-change the architecture, meta-feature construction, or SHAP
-attribution without re-training.
-"""
-
 import os
-import sys
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import json
+import joblib
 import numpy as np
 import pandas as pd
+import lightgbm as lgb
 import torch
 import torch.nn as nn
-import lightgbm as lgb
 import shap
-import joblib
-from sklearn.preprocessing import LabelEncoder
-from sqlalchemy import text
+from db.cassandra_component import get_session
+import psycopg2
 
-from db.postgres import get_connection
-from db.redis_client import (
-    get_cached_risk_score, cache_risk_score,
-    get_client, REDIS_TTL,
-)
+import logging
+logger = logging.getLogger(__name__)
 
-# ── paths ────────────────────────────────────────────────────────────────────
-BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
-
-# ── constants — must match training exactly ──────────────────────────────────
-TARGET   = "will_default_next_2_4_weeks"
-CAT_COLS = ["customer_segment", "geography_zone", "product_type", "shock_type"]
+# ==========================================
+# SECTION 1: Constants
+# ==========================================
 GRU_COLS = [
-    "balance_velocity", "salary_delay_delta", "discretionary_velocity",
-    "upi_lending_delta", "savings_drawdown_velocity",
-    "emi_paid_flag", "emi_bounced_flag", "missed_emi_count_rolling",
-]
-LGB_DROP = [
-    "customer_id", "observation_week",
-    "balance_velocity", "salary_delay_delta",
-    "discretionary_velocity", "upi_lending_delta",
+    "balance_velocity",
+    "salary_delay_delta",
+    "discretionary_velocity",
+    "upi_lending_delta",
     "savings_drawdown_velocity",
+    "emi_due_this_week",
+    "emi_paid_flag",
+    "emi_bounced_flag"
 ]
 SEQ_LEN = 12
+GRU_N_FEATURES = 8
 
-# ── load trained artefacts once at import ────────────────────────────────────
-_device   = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-_lgb      = lgb.Booster(model_file=os.path.join(BASE, "lgb_model.txt"))
-_ens      = joblib.load(os.path.join(BASE, "ensemble_model.pkl"))
-_ens_thr  = joblib.load(os.path.join(BASE, "ensemble_threshold.pkl"))
-_scaler   = joblib.load(os.path.join(BASE, "gru_scaler.pkl"))
+CAT_COLS = ["customer_segment", "geography_zone", "product_type", "shock_type"]
 
+from sklearn.preprocessing import LabelEncoder
 
+_cat_encoders = {}
+try:
+    _df = pd.read_csv("pipeline/pre_delinquency_dataset.csv")
+    for col in CAT_COLS:
+        le = LabelEncoder()
+        le.fit(_df[col].fillna(""))
+        _cat_encoders[col] = le
+except Exception as e:
+    logger.warning(f"Failed to load dataset for LabelEncoders: {e}")
+
+# ==========================================
+# SECTION 2: GRU Class Definition
+# ==========================================
 class GRUModel(nn.Module):
-    """Architecture must match training exactly."""
-    def __init__(self):
-        super().__init__()
-        self.gru = nn.GRU(len(GRU_COLS), 64, num_layers=2,
-                          batch_first=True, dropout=0.3)
-        self.fc  = nn.Linear(64, 1)
-
+    def __init__(self, input_size=8, hidden_size=64, num_layers=2, dropout=0.3):
+        super(GRUModel, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.gru = nn.GRU(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
+        self.fc = nn.Linear(hidden_size, 1)
+        
     def forward(self, x):
-        out, _ = self.gru(x)
-        return self.fc(out[:, -1, :]).squeeze(1)
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+        out, _ = self.gru(x, h0)
+        out = self.fc(out[:, -1, :])
+        return out
 
+# ==========================================
+# SECTION 3: Model Loading
+# ==========================================
+MODEL_DIR = "models"
+_lgb_model = None
+_lgb_threshold = None
+_gru_scaler = None
+_gru_model = None
+_ensemble_model = None
+_ensemble_thr = None
 
-_gru = GRUModel().to(_device)
-_gru.load_state_dict(
-    torch.load(os.path.join(BASE, "gru_model.pt"), map_location=_device)
-)
-_gru.eval()
+try:
+    _lgb_model = lgb.Booster(model_file=f"{MODEL_DIR}/lgb_model.txt")
+    _lgb_threshold = joblib.load(f"{MODEL_DIR}/lgb_threshold.pkl")
+    _gru_scaler = joblib.load(f"{MODEL_DIR}/gru_scaler.pkl")
+    
+    _gru_model = GRUModel(input_size=GRU_N_FEATURES)
+    _gru_model.load_state_dict(torch.load(f"{MODEL_DIR}/gru_model.pt", map_location=torch.device('cpu')))
+    _gru_model.eval()
+    
+    _ensemble_model = joblib.load(f"{MODEL_DIR}/ensemble_model.pkl")
+    _ensemble_thr = joblib.load(f"{MODEL_DIR}/ensemble_threshold.pkl")
+except Exception as e:
+    logger.warning(f"[ML Engine] Failed to load models, fallback will be used: {e}")
 
-# SHAP explainer — built once
-_lgb_explainer    = shap.TreeExplainer(_lgb)
-_lgb_feature_names = _lgb.feature_name()
+# ==========================================
+# SECTION 4: LGB Vector Builder
+# ==========================================
+def _encode_cat(col, val):
+    if col not in _cat_encoders:
+        return 0
+    le = _cat_encoders[col]
+    val = str(val) if val else ""
+    if val in le.classes_:
+        return int(le.transform([val])[0])
+    return 0
 
-# Meta-learner weights for contribution display
-_lgb_weight = float(_ens.coef_[0][0])
-_gru_weight = float(_ens.coef_[0][1])
-_total_w    = abs(_lgb_weight) + abs(_gru_weight)
-_lgb_pct    = round(abs(_lgb_weight) / _total_w * 100, 1)
-_gru_pct    = round(abs(_gru_weight) / _total_w * 100, 1)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  DATA LOADING + FEATURE ENGINEERING
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _get_history(customer_id: str) -> pd.DataFrame:
-    """Fetch last 12 weekly_features rows from Postgres."""
-    with get_connection() as conn:
-        rows = conn.execute(text("""
-            SELECT * FROM weekly_features
-            WHERE customer_id = :cid
-            ORDER BY observation_week DESC
-            LIMIT 12
-        """), {"cid": customer_id})
-        df = pd.DataFrame(rows.fetchall(), columns=rows.keys())
-    return df.sort_values("observation_week").reset_index(drop=True)
-
-
-def _engineer_features(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Compute the engineered columns the models expect.
-    These are week-over-week deltas / velocities derived from the raw
-    weekly_features rows — mirrors the dataset generation logic exactly.
-    """
-    df = df.copy()
-
-    # ── velocity / delta columns (week-over-week diff, first row = 0) ────
-    df["balance_velocity"]          = df["avg_daily_balance_inr"].diff().fillna(0)
-    df["salary_delay_delta"]        = df["salary_delay_days"].diff().fillna(0)
-    df["discretionary_velocity"]    = df["discretionary_spend_inr"].diff().fillna(0)
-    df["upi_lending_delta"]         = df["upi_to_lending_apps_count"].diff().fillna(0)
-    df["savings_drawdown_velocity"] = df["savings_drawdown_pct"].diff().fillna(0)
-
-    # ── EMI-related flags ────────────────────────────────────────────────
-    # These were in the training CSV but aren't in weekly_features.
-    # Derive from auto_debit_failures as the closest available proxy.
-    df["emi_paid_flag"]           = (df["auto_debit_failures"] == 0).astype(int)
-    df["emi_bounced_flag"]        = (df["auto_debit_failures"] > 0).astype(int)
-    df["missed_emi_count_rolling"] = df["emi_bounced_flag"].cumsum()
-
-    # ── shock_type (categorical) ─────────────────────────────────────────
-    # Derive from the most stressed signal this week
-    def _derive_shock(row):
-        if row.get("salary_delay_days", 0) > 5:
-            return "income_shock"
-        if row.get("auto_debit_failures", 0) >= 2:
-            return "payment_shock"
-        if row.get("savings_drawdown_pct", 0) < -25:
-            return "savings_shock"
-        return "none"
-
-    df["shock_type"] = df.apply(_derive_shock, axis=1)
-
-    return df
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  SCORING
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def get_real_score(customer_id: str) -> float | None:
-    """
-    Return ensemble risk probability for a customer, or None if we
-    don't have 12 weeks of history yet.
-    """
-    # ── Redis cache hit ──────────────────────────────────────────────────
-    cached = get_cached_risk_score(customer_id)
-    if cached:
-        return cached["risk_score"]
-
-    # ── load + validate ──────────────────────────────────────────────────
-    hist = _get_history(customer_id)
-    if len(hist) < SEQ_LEN:
-        return None
-
-    hist = _engineer_features(hist)
-
-    # ── LightGBM — current-week snapshot ─────────────────────────────────
-    row = hist.tail(1).copy()
+def _build_lgb_vector(record: dict) -> np.ndarray:
+    flat = dict(record)
     for col in CAT_COLS:
-        if col in row.columns:
-            row[col] = LabelEncoder().fit_transform(row[col].astype(str))
-    lgb_feats = [c for c in row.columns
-                 if c not in LGB_DROP + [TARGET, "id", "synced_at"]]
-    lgb_p = float(_lgb.predict(row[lgb_feats].fillna(0))[0])
+        val = flat.get(col, "")
+        flat[col] = _encode_cat(col, val)
+    
+    feature_names = _lgb_model.feature_name()
+    vec = [float(flat.get(feat, 0.0)) for feat in feature_names]
+    return np.array([vec], dtype=np.float32)
 
-    # ── GRU — 12-week sequence ───────────────────────────────────────────
-    seq = hist[GRU_COLS].fillna(0).astype(float).values
-    seq_scaled = _scaler.transform(seq).astype(np.float32)
-    t = torch.tensor(seq_scaled).unsqueeze(0).to(_device)
+# ==========================================
+# SECTION 5: GRU History Fetcher
+# ==========================================
+def _fetch_gru_history(customer_id: str, current_record: dict) -> np.ndarray:
+    cassandra_session = get_session()
+    
+    query = f"""
+        SELECT observation_week, balance_velocity, salary_delay_delta, discretionary_velocity,
+               upi_lending_delta, savings_drawdown_velocity, emi_due_this_week, 
+               emi_paid_flag, emi_bounced_flag
+        FROM weekly_feature_snapshots
+        WHERE customer_id = '{customer_id}'
+        LIMIT {SEQ_LEN}
+    """
+    rows = cassandra_session.execute(query)
+    
+    history = []
+    for r in rows:
+        history.append({
+            "observation_week": r.observation_week,
+            "balance_velocity": float(r.balance_velocity or 0),
+            "salary_delay_delta": float(r.salary_delay_delta or 0),
+            "discretionary_velocity": float(r.discretionary_velocity or 0),
+            "upi_lending_delta": float(r.upi_lending_delta or 0),
+            "savings_drawdown_velocity": float(r.savings_drawdown_velocity or 0),
+            "emi_due_this_week": 1.0 if r.emi_due_this_week else 0.0,
+            "emi_paid_flag": 1.0 if r.emi_paid_flag else 0.0,
+            "emi_bounced_flag": 1.0 if r.emi_bounced_flag else 0.0
+        })
+    
+    history = sorted(history, key=lambda x: x["observation_week"])
+    
+    if len(history) == 0:
+        current_vec = [
+            float(current_record.get("balance_velocity", 0)),
+            float(current_record.get("salary_delay_delta", 0)),
+            float(current_record.get("discretionary_velocity", 0)),
+            float(current_record.get("upi_lending_delta", 0)),
+            float(current_record.get("savings_drawdown_velocity", 0)),
+            1.0 if current_record.get("emi_due_this_week") else 0.0,
+            1.0 if current_record.get("emi_paid_flag") else 0.0,
+            1.0 if current_record.get("emi_bounced_flag") else 0.0
+        ]
+        history_arr = np.tile(current_vec, (SEQ_LEN, 1)).astype(np.float32)
+    else:
+        vecs = []
+        for h in history:
+            vecs.append([
+                h["balance_velocity"],
+                h["salary_delay_delta"],
+                h["discretionary_velocity"],
+                h["upi_lending_delta"],
+                h["savings_drawdown_velocity"],
+                h["emi_due_this_week"],
+                h["emi_paid_flag"],
+                h["emi_bounced_flag"]
+            ])
+        arr = np.array(vecs, dtype=np.float32)
+        
+        N = len(vecs)
+        if N < SEQ_LEN:
+            padding = np.zeros((SEQ_LEN - N, GRU_N_FEATURES), dtype=np.float32)
+            history_arr = np.vstack([padding, arr])
+        else:
+            history_arr = arr
+            
+    scaled_history = _gru_scaler.transform(history_arr)
+    return scaled_history.astype(np.float32)
+
+# ==========================================
+# SECTION 6: LGB Scorer
+# ==========================================
+def _lgb_score(lgb_vec: np.ndarray) -> tuple:
+    proba = _lgb_model.predict(lgb_vec)[0]
+    
+    explainer = shap.TreeExplainer(_lgb_model)
+    shap_vals = explainer.shap_values(lgb_vec)
+    if isinstance(shap_vals, list):
+        shap_vals = shap_vals[0]
+    
+    if len(shap_vals.shape) > 1:
+        shap_vals = shap_vals[0]
+    
+    top5_idx = np.argsort(np.abs(shap_vals))[::-1][:5]
+    feature_names = _lgb_model.feature_name()
+    
+    shap_factors = []
+    for idx in top5_idx:
+        shap_factors.append({
+            "feature": feature_names[idx],
+            "value": float(lgb_vec[0, idx]),
+            "contribution": float(abs(shap_vals[idx])),
+            "direction": "increases_risk" if shap_vals[idx] > 0 else "decreases_risk"
+        })
+        
+    return float(proba), shap_factors
+
+# ==========================================
+# SECTION 7: GRU Scorer
+# ==========================================
+def _gru_score(history_array: np.ndarray, current_record: dict) -> tuple:
+    tensor = torch.tensor(history_array[np.newaxis, ...], dtype=torch.float32)
+    
+    _gru_model.eval()
     with torch.no_grad():
-        gru_p = float(torch.sigmoid(_gru(t)).cpu().item())
-
-    # ── Ensemble — 5 meta features matching training exactly ─────────────
-    meta = np.array([[
-        lgb_p,
-        gru_p,
-        abs(lgb_p - gru_p),
-        lgb_p * gru_p,
-        max(lgb_p, gru_p),
-    ]])
-    score = float(_ens.predict_proba(meta)[0][1])
-
-    # ── cache + return ───────────────────────────────────────────────────
-    cache_risk_score(customer_id, {"risk_score": score})
-    return score
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  SHAP + GRADIENT ATTRIBUTION
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _get_lgb_top3(lgb_2d_row: np.ndarray) -> dict:
-    """TreeSHAP on the single-row LGB feature vector."""
-    sv = _lgb_explainer.shap_values(lgb_2d_row)[0]   # shape (n_feats,)
-    top3 = sorted(
-        zip(_lgb_feature_names, sv),
-        key=lambda x: abs(x[1]), reverse=True,
-    )[:3]
-    return {feat: round(float(val), 4) for feat, val in top3}
-
-
-def _get_gru_attribution(seq_tensor: torch.Tensor) -> tuple[dict, int]:
-    """
-    Gradient-based attribution on the GRU.
-    Returns top-3 feature importances and the peak-stress week index.
-    """
-    _gru.train()                    # enable grad flow
-    seq = seq_tensor.clone().requires_grad_(True)
-    out = _gru(seq)
+        proba = torch.sigmoid(_gru_model(tensor)).item()
+        
+    _gru_model.train()
+    seq = tensor.clone().requires_grad_(True)
+    out = _gru_model(seq)
     out.backward()
-    attr      = seq.grad.abs().squeeze(0).cpu().numpy()   # (12, 8)
-    mean_attr = attr.mean(axis=0)                         # (8,)
-    top3_idx  = mean_attr.argsort()[::-1][:3]
-    active_week = int(attr.sum(axis=1).argmax()) + 1
-    _gru.eval()                     # restore eval mode
-    return (
-        {GRU_COLS[i]: round(float(mean_attr[i]), 4) for i in top3_idx},
-        active_week,
-    )
+    
+    attr = seq.grad.abs().squeeze(0).numpy()
+    mean_attr = attr.mean(axis=0)
+    
+    top3_idx = np.argsort(mean_attr)[::-1][:3]
+    
+    gru_factors = []
+    for idx in top3_idx:
+        feat_name = GRU_COLS[idx]
+        gru_factors.append({
+            "feature": feat_name,
+            "value": float(current_record.get(feat_name, 0)),
+            "contribution": float(mean_attr[idx]),
+            "direction": "increases_risk"
+        })
+        
+    _gru_model.eval()
+    return float(proba), gru_factors
 
+# ==========================================
+# SECTION 8: Public API
+# ==========================================
+def score_from_kafka(record: dict) -> tuple:
+    if not all([_lgb_model, _gru_scaler, _gru_model, _ensemble_model]):
+        raise RuntimeError("ML Engine models are not fully loaded")
+        
+    print("\n" + "="*50)
+    print(f"[ML DEBUG] INFERENCE START: Customer {record.get('customer_id')}")
+    print("="*50)
 
-def get_real_shap(customer_id: str) -> dict | None:
-    """
-    Full SHAP/attribution explanation for a customer, or None if
-    fewer than 12 weeks of data exist.
+    # 1. LightGBM
+    lgb_vec = _build_lgb_vector(record)
+    print(f"[ML DEBUG] LGB Vector Shape: {lgb_vec.shape}")
+    print(f"[ML DEBUG] LGB Vector: {lgb_vec}")
+    lgb_p, lgb_shap = _lgb_score(lgb_vec)
+    print(f"[ML DEBUG] LGB Probability: {lgb_p:.4f}")
+    
+    # 2. GRU
+    history = _fetch_gru_history(record.get("customer_id", ""), record)
+    print(f"[ML DEBUG] GRU History Tensor Shape: {history.shape}")
+    print(f"[ML DEBUG] GRU History (last row): {history[-1] if len(history) > 0 else 'EMPTY'}")
+    gru_p, gru_shap = _gru_score(history, record)
+    print(f"[ML DEBUG] GRU Probability: {gru_p:.4f}")
+    
+    # 3. Meta-Ensemble
+    lgb_p_f = float(lgb_p)
+    gru_p_f = float(gru_p)
+    meta_features = [lgb_p_f, gru_p_f, abs(lgb_p_f - gru_p_f), lgb_p_f * gru_p_f, max(lgb_p_f, gru_p_f)]
+    
+    print(f"[ML DEBUG] Meta-Ensemble Features (Unused for now): {meta_features}")
+    
+    import math
+    base_lr = _ensemble_model.calibrated_classifiers_[0].estimator
+    lgb_weight = float(base_lr.coef_[0][0])
+    gru_weight = float(base_lr.coef_[0][1])
+    intercept  = float(base_lr.intercept_[0])
 
-    Returns dict with:
-        ensemble_score, lgb_score, gru_score,
-        lgb_contribution, gru_contribution,
-        lgb_top3_signals, gru_top3_signals, gru_stress_peak_week
-    """
-    # ── Redis cache hit (separate key from risk score) ───────────────────
-    redis = get_client()
-    cached = redis.get(f"shap:{customer_id}")
-    if cached:
-        return json.loads(cached)
+    raw = lgb_weight * lgb_p_f + gru_weight * gru_p_f + intercept
+    risk_score = round(1 / (1 + math.exp(-raw)), 4)
+    
+    print(f"[ML DEBUG] Final Ensemble Risk Score (Weighted): {risk_score:.4f}")
+    
+    # 4. SHAP
+    merged_shap = lgb_shap + gru_shap
+    merged_shap = sorted(merged_shap, key=lambda x: x["contribution"], reverse=True)[:5]
+    print(f"[ML DEBUG] Top 5 Merged SHAP factors:")
+    for s in merged_shap:
+        print(f"  - {s['feature']}: contrib={s['contribution']:.4f}, dir={s['direction']}, val={s['value']}")
+    
+    print("="*50 + "\n")
+    
+    return round(float(risk_score), 4), merged_shap
 
-    # ── load + validate ──────────────────────────────────────────────────
-    hist = _get_history(customer_id)
-    if len(hist) < SEQ_LEN:
-        return None
-
-    hist = _engineer_features(hist)
-
-    # ── LGB features + prob ──────────────────────────────────────────────
-    row = hist.tail(1).copy()
-    for col in CAT_COLS:
-        if col in row.columns:
-            row[col] = LabelEncoder().fit_transform(row[col].astype(str))
-    lgb_feats = [c for c in row.columns
-                 if c not in LGB_DROP + [TARGET, "id", "synced_at"]]
-    lgb_2d = row[lgb_feats].fillna(0).values          # (1, n_feats)
-    lgb_p  = float(_lgb.predict(lgb_2d)[0])
-
-    # ── GRU sequence + prob ──────────────────────────────────────────────
-    seq = hist[GRU_COLS].fillna(0).astype(float).values
-    seq_scaled = _scaler.transform(seq).astype(np.float32)
-    t = torch.tensor(seq_scaled).unsqueeze(0).to(_device)
-    with torch.no_grad():
-        gru_p = float(torch.sigmoid(_gru(t)).cpu().item())
-
-    # ── ensemble score ───────────────────────────────────────────────────
-    meta = np.array([[
-        lgb_p, gru_p, abs(lgb_p - gru_p),
-        lgb_p * gru_p, max(lgb_p, gru_p),
-    ]])
-    ensemble_p = float(_ens.predict_proba(meta)[0][1])
-
-    # ── SHAP: LGB top 3 ─────────────────────────────────────────────────
-    lgb_top3 = _get_lgb_top3(lgb_2d)
-
-    # ── SHAP: GRU gradient attribution top 3 + peak week ────────────────
-    gru_top3, active_week = _get_gru_attribution(t)
-
-    result = {
-        "ensemble_score":       round(ensemble_p, 4),
-        "lgb_score":            round(lgb_p, 4),
-        "gru_score":            round(gru_p, 4),
-        "lgb_contribution":     f"{_lgb_pct}%",
-        "gru_contribution":     f"{_gru_pct}%",
-        "lgb_top3_signals":     lgb_top3,
-        "gru_top3_signals":     gru_top3,
-        "gru_stress_peak_week": active_week,
-    }
-
-    # ── cache for 24 h (same TTL as risk score) ──────────────────────────
-    redis.setex(
-        f"shap:{customer_id}",
-        REDIS_TTL["risk_score"],
-        json.dumps(result),
-    )
-    return result
+def get_risk_level(score: float) -> str:
+    # _ensemble_thr is loaded from ensemble_threshold.pkl
+    # default fallback is 0.5833 if for some reason it's not loaded
+    thr = _ensemble_thr if _ensemble_thr is not None else 0.5833
+    
+    if score >= thr:
+        if score >= 0.75: return "High"
+        return "Medium"
+    return "Low"

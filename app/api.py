@@ -196,9 +196,10 @@ async def stream_risk():
 
 @app.get("/health")
 def health():
+    from app.ml_engine import _ensemble_model
     return {
         "status":  "ok",
         "kafka":   "external",
         "graph":   "loaded",
-        "model":   "mock-1.0.0",
+        "model":   "ensemble-2.0.0" if _ensemble_model is not None else "mock-1.0.0",
     }
