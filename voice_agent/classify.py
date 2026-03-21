@@ -139,16 +139,19 @@ Return JSON only: {{"intent": "QUESTION|YES|NO|HUMAN|UPSET|CLARIFICATION_YES"}}
     return call_llm(prompt)
 
 
-def generate_offer_response(intent_code, transcript, offer_detail, intervention_method="rm_call", specialist=None):
+def generate_offer_response(intent_code, transcript, offer_detail, intervention_method=None, specialist=None):
     """Call 2 — hardcoded for most intents, LLM only for questions."""
     if specialist is None:
-        specialist_map = {
-            "payment_holiday":      "our payments team who will activate that for you right away",
-            "restructuring":        "our restructuring specialist who will get that sorted for you",
-            "financial_counseling": "one of our financial advisors for a free personalised session",
-            "rm_call":              "your relationship manager who can discuss personalised options with you directly",
-        }
-        specialist = specialist_map.get(intervention_method, "our support team")
+        if intervention_method is None:
+            specialist = "our support team"
+        else:
+            specialist_map = {
+                "payment_holiday":      "our payments team who will activate that for you right away",
+                "restructuring":        "our restructuring specialist who will get that sorted for you",
+                "financial_counseling": "one of our financial advisors for a free personalised session",
+                "rm_call":              "your relationship manager who can discuss personalised options with you directly",
+            }
+            specialist = specialist_map.get(intervention_method, "our support team")
 
     responses = {
         "YES": f"Perfect, let me connect you with {specialist}.",
@@ -191,7 +194,7 @@ def offer_stage(transcript, history, payload, stress):
         intent_code,
         transcript,
         payload["offer_detail"],
-        payload.get("intervention_method", "rm_call"),
+        payload.get("intervention_method"),
         payload.get("specialist"),
     )
 
@@ -230,59 +233,36 @@ def tips_stage(transcript, history, payload, stress):
     prompt = f"""
 You are Maya, a Barclays support agent.
 Customer: {payload["customer_name"]}
-The customer has declined the offer.
-Your job now: give one helpful financial tip, then ask
-if they'd like to speak to a financial advisor.
+The customer declined the offer. Your job: give a tip, then ask about a financial advisor.
 
 Conversation so far:
 {history_text}
 
 Customer just said: "{transcript}"
 
----
+Decide which applies:
 
-CHECK IN THIS ORDER. STOP AT FIRST MATCH.
+1. If customer says YES to advisor (yes/sure/ok/why not) →
+   Response: "I'll connect you with one of our financial advisors now."
+   intent: wants_counsellor, next_action: escalate_counsellor, outcome: counsellor_requested
 
-PRIORITY 1 — WANTS ADVISOR
-Any yes to speaking with someone:
-"yes", "sure", "ok", "that would help", "why not", "yeah ok"
-→ "I'll connect you with one of our financial advisors now."
-→ intent: wants_counsellor, next_action: escalate_counsellor
+2. If customer says NO (no thanks/I'm fine/I'll manage) →
+   Wish them well warmly. One sentence.
+   intent: declines_all, next_action: close_call, outcome: declined_gracefully
 
-PRIORITY 2 — DECLINES ADVISOR
-Any no:
-"no thanks", "I'm fine", "don't need it", "I'll manage"
-→ Wish them well warmly. One sentence.
-→ intent: declines_all, next_action: close_call
+3. If you haven't given a tip yet in this conversation →
+   Give ONE practical tip (spending tracker, review subscriptions, check direct debits).
+   Then ask: "Would it help to speak with a financial advisor?"
+   intent: tip_given, next_action: continue, outcome: null
 
-PRIORITY 3 — FIRST TIME IN THIS STAGE
-If conversation history shows you haven't given a tip yet:
-→ Give ONE practical tip relevant to their situation
-→ Then ask: "Would it help to speak with one of our
-   financial advisors for more personalised guidance?"
-→ intent: tip_given, next_action: continue
-
-PRIORITY 4 — DISTRESSED OR DISPUTE
-→ intent: distressed or dispute, next_action: escalate_urgent
-
-PRIORITY 5 — UNCLEAR
-→ Ask once: "Would speaking to a financial advisor be helpful?"
-→ intent: unclear, next_action: continue
-
----
-
-TIP GUIDANCE:
-Keep it practical and specific to someone facing payment difficulty.
-Examples: setting up a spending tracker, reviewing direct debits,
-checking for unused subscriptions.
-One sentence only. Not preachy.
+4. If distressed or upset → intent: distressed, next_action: escalate_urgent
 
 NEVER SAY: default, risk, flagged, collections, overdue, missed payment
-Max 2 sentences total. Warm and human.
+Max 2 sentences. Warm and human.
 
 Return JSON only:
 {{
-    "intent": "wants_counsellor | declines_all | tip_given | distressed | dispute | unclear",
+    "intent": "wants_counsellor | declines_all | tip_given | distressed | unclear",
     "next_action": "escalate_counsellor | close_call | continue | escalate_urgent",
     "outcome": "counsellor_requested | declined_gracefully | null",
     "response": "str",

@@ -39,11 +39,10 @@ def analyst_node(state: Main_context):
 
     Give Stress analysis. return JSON ONLY:
         {{
-            "narrative" : "str" 
-            "stress_type" : "str"
-            "severity" : "very high , high , medium , low"
+            "narrative" : "str",
+            "stress_type": "income_shock | overspending | structural | debt | unknown",
+            "severity" : "very high | high | medium | low"
         }}
-    
     """
 
     llm = get_llm(0)
@@ -115,6 +114,14 @@ def agent2_compliance(state: Main_context) -> dict:
             "hard_stop": True,
             "hard_stop_reason": "KYC lapsed - cannot process until updated",
             "eligible_interventions": [],
+        }
+
+    # Low risk - monitor only
+    if state["total_risk_score"] < 0.3:
+        return {
+            "hard_stop": False,
+            "hard_stop_reason": None,
+            "eligible_interventions": ["monitor_only"],
         }
 
     # PHASE 2: Build eligible interventions + stress-based ranking
@@ -206,99 +213,46 @@ def agent2_compliance(state: Main_context) -> dict:
         "eligible_interventions": ranked_interventions,
     }
 
-    if state["Customer_profile"]["existing_restructuring"]:
-        return {
-            "hard_stop": True,
-            "hard_stop_reason": "Existing restructuring active - no new offers",
-            "eligible_interventions": [],
-        }
-
-    # Low risk - monitor only
-    if state["total_risk_score"] < 0.3:
-        return {
-            "hard_stop": False,
-            "hard_stop_reason": None,
-            "eligible_interventions": ["monitor_only"],
-        }
-
-    # Build eligible interventions based on rules
-    eligible = [
-        "payment_holiday",
-        "restructuring",
-        "rm_call",
-        "financial_counseling",
-        "monitor_only",
-    ]
-
-    # remove what's not allowed
-    if state["Customer_profile"]["loan_type"] == "Home Loan":
-        eligible.remove("payment_holiday")
-
-    if state["Customer_profile"]["tenure_months"] < 12:
-        eligible.remove("restructuring")
-
-    if state["Customer_profile"]["relationship_value"] == "Low":
-        eligible.remove("rm_call")
-
-    return {
-        "hard_stop": False,
-        "hard_stop_reason": None,
-        "eligible_interventions": eligible,
-    }
 
 
 def intervention_agent(state: Main_context):
-    shap = state["Shap"]
     risk_score = state["total_risk_score"]
     risk_level = state["risk_level"]
 
-    shap_text = ""
-    for sha in shap:
-        shap_text += f"{sha['feature']}: {sha['value']} , weightage: {sha['contribution']}, direction: {sha['direction']}\n"
-
-    eligible_text = "\n".join(state["eligible_interventions"])
-
-    # Prompt 1: Method selection only
-    prompt1 = f"""You are a Financial expert in Delinquency intervention. Select the best intervention approach for this customer.
+    eligible_interventions = state.get("eligible_interventions", [])
+    eligible_text = "\\n".join(eligible_interventions)
+    
+    # Prompt 1: Method selection from the filtered/ranked list
+    prompt1 = f"""You are a Financial expert in Delinquency intervention. Select the best intervention approach for this customer from the EXACT list of eligible interventions below.
     
 Given data:
 - risk_score: {risk_score}
 - risk_level: {risk_level}
-- shap_details: {shap_text}
 - customer_details:
   - tenure_months: {state["Customer_profile"]["tenure_months"]}
   - loan_type: {state["Customer_profile"]["loan_type"]}
   - relationship with bank: {state["Customer_profile"]["relationship_value"]}
-  - loan_amount: {state["Customer_profile"]["loan_amount"]}
 
-eligible interventions: {eligible_text}
-
-Note: 'monitor_only' should only be selected if risk_score < 0.35. This customer has risk_score: {risk_score} — active intervention is warranted.
+eligible interventions EXACT MATCH:
+{eligible_text}
 
 Strictly return JSON ONLY:
 {{
-    "Intervention_method": "payment_holiday | restructuring | rm_call | financial_counseling | monitor_only",
+    "Intervention_method": "exact matching string from eligible interventions list",
     "Intervention_justification": "brief reason for selection"
 }}"""
 
-    llm = get_llm(0)
+    llm = get_llm(0) # or get_llm(1) depending on model availability
     result1 = llm.invoke(prompt1)
     parse1 = clean_json(result1.content)
 
-    # Validate and potentially override method selection
-    eligible_interventions = state.get("eligible_interventions", [])
     selected_method = parse1.get("Intervention_method", "")
 
+    # Safety constraint: enforce valid selection
     if selected_method not in eligible_interventions:
-        if risk_score >= 0.35:
-            selected_method = next(
-                (i for i in eligible_interventions if i != "monitor_only"),
-                eligible_interventions[0] if eligible_interventions else "monitor_only",
-            )
-        else:
-            selected_method = (
-                eligible_interventions[0] if eligible_interventions else "monitor_only"
-            )
+        selected_method = eligible_interventions[0] if eligible_interventions else "monitor_only"
+        
+    print(f"\\n[INTERVENTION AGENT] Final selected intervention: {selected_method}\\n")
 
     intervention_descriptions = {
         "payment_holiday": "offer a temporary payment holiday/extension on upcoming payments",
@@ -334,6 +288,7 @@ Strictly return JSON ONLY:
     "Message_content": "2-3 sentence outreach message tailored to the selected intervention"
 }}"""
 
+    llm = get_llm(0)
     result2 = llm.invoke(prompt2)
     parse2 = clean_json(result2.content)
 

@@ -205,10 +205,13 @@ def insert_into_db(record: dict):
         print(f"[Cassandra] Insert failed for {record.get('customer_id')}: {e}")
 
 
+triggered = set()
+
 for message in consumer:
     record = message.value
+    customer_id = record["customer_id"]
 
-    print(f"customer={record['customer_id']} | "
+    print(f"customer={customer_id} | "
           f"week={record['observation_week']} | "
           f"salary_delay={record['salary_delay_days']}d | "
           f"balance=₹{float(record['avg_daily_balance_inr']):,.0f} | "
@@ -218,7 +221,8 @@ for message in consumer:
     insert_into_db(record)
 
     from db.redis_client import invalidate_customer
-    invalidate_customer(record["customer_id"])  # fresh data arrived, bust cache
+    invalidate_customer(customer_id)  # fresh data arrived, bust cache
 
-    if should_trigger(record):
+    if should_trigger(record) and customer_id not in triggered:
+        triggered.add(customer_id)
         fire_intervention(record)
