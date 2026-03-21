@@ -59,6 +59,24 @@ with open(CSV_FILE, newline="") as f:
             "financial_stress_queries":       int(row["financial_stress_queries"]),
             "customer_service_calls":         int(row["customer_service_calls"]),
             "will_default_next_2_4_weeks":    bool(int(row["will_default_next_2_4_weeks"])),
+            
+            # --- NEW ML FIELDS ---
+            "monthly_income_inr":          float(row["monthly_income_inr"]),
+            "emi_amount_inr":              float(row["emi_amount_inr"]),
+            "emi_due_this_week":           bool(int(row["emi_due_this_week"])),
+            "available_funds_inr":         float(row["available_funds_inr"]),
+            "emi_paid_flag":               bool(int(row["emi_paid_flag"])),
+            "emi_bounced_flag":            bool(int(row["emi_bounced_flag"])),
+            "missed_emi_count_rolling":    int(row["missed_emi_count_rolling"]),
+            
+            "balance_velocity":            float(row["balance_velocity"]),
+            "salary_delay_delta":          float(row["salary_delay_delta"]),
+            "discretionary_velocity":      float(row["discretionary_velocity"]),
+            "upi_lending_delta":           float(row["upi_lending_delta"]),
+            "savings_drawdown_velocity":   float(row["savings_drawdown_velocity"]),
+            
+            "external_shock_flag":         bool(int(row["external_shock_flag"])),
+            "shock_type":                  row["shock_type"],
         }
 
         producer.send(KAFKA_TOPIC, value=message)

@@ -40,7 +40,9 @@ def should_trigger(record: dict) -> bool:
         record.get("salary_delay_days", 0)         >  STRESS_THRESHOLDS["salary_delay_days"] or
         record.get("auto_debit_failures", 0)        >= STRESS_THRESHOLDS["auto_debit_failures"] or
         record.get("savings_drawdown_pct", 0.0)     <  STRESS_THRESHOLDS["savings_drawdown_pct"] or
-        record.get("utility_payment_delay_days", 0) >  STRESS_THRESHOLDS["utility_payment_delay_days"]
+        record.get("utility_payment_delay_days", 0) >  STRESS_THRESHOLDS["utility_payment_delay_days"] or
+        record.get("emi_bounced_flag", False)       == True or
+        record.get("missed_emi_count_rolling", 0)   >= 2
     )
 
 def fire_intervention(record: dict):
@@ -74,7 +76,13 @@ def insert_into_postgres(record: dict):
                 credit_card_utilization_pct, credit_inquiries_last_30d,
                 paying_minimum_only_flag, mobile_app_logins,
                 financial_stress_queries, customer_service_calls,
-                will_default_next_2_4_weeks
+                will_default_next_2_4_weeks,
+                monthly_income_inr, emi_amount_inr, emi_due_this_week,
+                available_funds_inr, emi_paid_flag, emi_bounced_flag,
+                missed_emi_count_rolling, balance_velocity,
+                salary_delay_delta, discretionary_velocity,
+                upi_lending_delta, savings_drawdown_velocity,
+                external_shock_flag, shock_type
             ) VALUES (
                 :customer_id, :observation_week, :age, :customer_segment,
                 :geography_zone, :product_type, :account_vintage_months,
@@ -89,7 +97,13 @@ def insert_into_postgres(record: dict):
                 :credit_card_utilization_pct, :credit_inquiries_last_30d,
                 :paying_minimum_only_flag, :mobile_app_logins,
                 :financial_stress_queries, :customer_service_calls,
-                :will_default_next_2_4_weeks
+                :will_default_next_2_4_weeks,
+                :monthly_income_inr, :emi_amount_inr, :emi_due_this_week,
+                :available_funds_inr, :emi_paid_flag, :emi_bounced_flag,
+                :missed_emi_count_rolling, :balance_velocity,
+                :salary_delay_delta, :discretionary_velocity,
+                :upi_lending_delta, :savings_drawdown_velocity,
+                :external_shock_flag, :shock_type
             )
             ON CONFLICT (customer_id, observation_week) DO NOTHING
         """), record)
@@ -119,7 +133,13 @@ def insert_into_postgres(record: dict):
                 auto_debit_failures, credit_card_utilization_pct,
                 credit_inquiries_last_30d, paying_minimum_only_flag,
                 mobile_app_logins, financial_stress_queries,
-                customer_service_calls, will_default_next_2_4_weeks
+                customer_service_calls, will_default_next_2_4_weeks,
+                monthly_income_inr, emi_amount_inr, emi_due_this_week,
+                available_funds_inr, emi_paid_flag, emi_bounced_flag,
+                missed_emi_count_rolling, balance_velocity,
+                salary_delay_delta, discretionary_velocity,
+                upi_lending_delta, savings_drawdown_velocity,
+                external_shock_flag, shock_type
             ) VALUES (
                 :customer_id, :observation_week, :salary_delay_days,
                 :salary_drop_pct, :avg_daily_balance_inr, :balance_trend_pct,
@@ -132,7 +152,13 @@ def insert_into_postgres(record: dict):
                 :auto_debit_failures, :credit_card_utilization_pct,
                 :credit_inquiries_last_30d, :paying_minimum_only_flag,
                 :mobile_app_logins, :financial_stress_queries,
-                :customer_service_calls, :will_default_next_2_4_weeks
+                :customer_service_calls, :will_default_next_2_4_weeks,
+                :monthly_income_inr, :emi_amount_inr, :emi_due_this_week,
+                :available_funds_inr, :emi_paid_flag, :emi_bounced_flag,
+                :missed_emi_count_rolling, :balance_velocity,
+                :salary_delay_delta, :discretionary_velocity,
+                :upi_lending_delta, :savings_drawdown_velocity,
+                :external_shock_flag, :shock_type
             )
             ON CONFLICT (customer_id, observation_week) DO NOTHING
         """), record)
@@ -155,11 +181,19 @@ def insert_into_cassandra(record: dict):
             credit_inquiries_last_30d, paying_minimum_only_flag,
             mobile_app_logins, financial_stress_queries,
             customer_service_calls, will_default_next_2_4_weeks,
+            monthly_income_inr, emi_amount_inr, emi_due_this_week,
+            available_funds_inr, emi_paid_flag, emi_bounced_flag,
+            missed_emi_count_rolling, balance_velocity,
+            salary_delay_delta, discretionary_velocity,
+            upi_lending_delta, savings_drawdown_velocity,
+            external_shock_flag, shock_type,
             source, ingested_at
         ) VALUES (
             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            %s, %s
         ) IF NOT EXISTS
     """, (
         record["customer_id"],
@@ -188,6 +222,20 @@ def insert_into_cassandra(record: dict):
         record["financial_stress_queries"],
         record["customer_service_calls"],
         bool(record["will_default_next_2_4_weeks"]),
+        float(record.get("monthly_income_inr", 0.0)),
+        float(record.get("emi_amount_inr", 0.0)),
+        bool(record.get("emi_due_this_week", False)),
+        float(record.get("available_funds_inr", 0.0)),
+        bool(record.get("emi_paid_flag", False)),
+        bool(record.get("emi_bounced_flag", False)),
+        int(record.get("missed_emi_count_rolling", 0)),
+        float(record.get("balance_velocity", 0.0)),
+        float(record.get("salary_delay_delta", 0.0)),
+        float(record.get("discretionary_velocity", 0.0)),
+        float(record.get("upi_lending_delta", 0.0)),
+        float(record.get("savings_drawdown_velocity", 0.0)),
+        bool(record.get("external_shock_flag", False)),
+        record.get("shock_type", ""),
         record.get("source", "dataset_seed"),
         datetime.utcnow()
     ))
