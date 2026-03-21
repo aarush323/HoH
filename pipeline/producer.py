@@ -12,13 +12,18 @@ producer = KafkaProducer(
     bootstrap_servers=KAFKA_BROKER,
     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
 )
-
+DEMO_CUSTOMERS = {"C00032", "C00011", "C00078", "C00002"}
 print(f"[Producer] Connected to Kafka. Streaming '{CSV_FILE}' → topic '{KAFKA_TOPIC}'...")
 
 sent = 0
 with open(CSV_FILE, newline="") as f:
     reader = csv.DictReader(f)
     for row in reader:
+
+
+        if row["customer_id"] not in DEMO_CUSTOMERS:
+            continue
+        
         message = {
             "customer_id":                    row["customer_id"],
             "observation_week":               row["observation_week"],

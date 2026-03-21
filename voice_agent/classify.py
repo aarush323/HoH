@@ -80,7 +80,7 @@ NOT CONFIDENT — treat as struggling:
 - "not sure if I can"
 - "looking a bit difficult"
 
-→ AAcknowledge AND say: you have {payload["offer_detail"]} that might help.
+→ Acknowledge AND say: you have {payload["offer_detail"]} that might help.
 → Do NOT just say "let me see what I can do" — that's vague and unhelpful.
 → One sentence acknowledgement + one sentence introducing the option.
 
@@ -105,6 +105,16 @@ Return JSON only:
     print(
         f"[CLASSIFY DEBUG] transcript='{transcript}' → intent={result.get('intent')} reasoning={result.get('reasoning')}"
     )
+
+    # Fix 3: Override struggling response with Python-built text
+    # so the LLM can't hallucinate the offer — offer_detail is used verbatim
+    if result.get("intent") == "struggling":
+        result["response"] = (
+            f"I understand, and I appreciate you sharing that. "
+            f"We actually have {payload['offer_detail']} that might help — would you like to hear more about it?"
+        )
+        result["next_action"] = "advance_stage"
+
     return result
 
 
@@ -129,10 +139,19 @@ Return JSON only: {{"intent": "QUESTION|YES|NO|HUMAN|UPSET|CLARIFICATION_YES"}}
     return call_llm(prompt)
 
 
-def generate_offer_response(intent_code, transcript, offer_detail):
+def generate_offer_response(intent_code, transcript, offer_detail, intervention_method="rm_call", specialist=None):
     """Call 2 — hardcoded for most intents, LLM only for questions."""
+    if specialist is None:
+        specialist_map = {
+            "payment_holiday":      "our payments team who will activate that for you right away",
+            "restructuring":        "our restructuring specialist who will get that sorted for you",
+            "financial_counseling": "one of our financial advisors for a free personalised session",
+            "rm_call":              "your relationship manager who can discuss personalised options with you directly",
+        }
+        specialist = specialist_map.get(intervention_method, "our support team")
+
     responses = {
-        "YES": "Perfect, let me connect you with our restructuring specialist who will get that sorted for you.",
+        "YES": f"Perfect, let me connect you with {specialist}.",
         "NO": "Absolutely no pressure — let me share one quick tip that might help.",
         "HUMAN": "Of course, I'll connect you right away.",
         "CLARIFICATION_YES": "Would you like to go ahead with this option?",
@@ -171,7 +190,9 @@ def offer_stage(transcript, history, payload, stress):
     response_text, about_offer = generate_offer_response(
         intent_code,
         transcript,
-        payload["offer_detail"]
+        payload["offer_detail"],
+        payload.get("intervention_method", "rm_call"),
+        payload.get("specialist"),
     )
 
     # Step 3 — map to output format
@@ -209,7 +230,7 @@ def tips_stage(transcript, history, payload, stress):
     prompt = f"""
 You are Maya, a Barclays support agent.
 Customer: {payload["customer_name"]}
-The customer has declined the restructuring offer.
+The customer has declined the offer.
 Your job now: give one helpful financial tip, then ask
 if they'd like to speak to a financial advisor.
 

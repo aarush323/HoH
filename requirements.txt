@@ -23,6 +23,7 @@ shap
 
 # Streaming & Pipeline
 kafka-python
+httpx
 
 # Voice Agent & Audio
 edge-tts

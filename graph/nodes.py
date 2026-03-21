@@ -59,6 +59,28 @@ def analyst_node(state: Main_context):
     }
 
 
+# ── Fuzzy stress type normalizer ─────────────────────────────────────────────
+_STRESS_KEYWORDS = {
+    "income_shock": ["income", "salary", "cash flow", "cashflow", "earning", "wage", "pay cut", "job loss"],
+    "overspending": ["spend", "discretionary", "lifestyle", "gambling", "lottery", "impulse"],
+    "structural":   ["structural", "auto debit", "auto-debit", "utility", "systemic", "recurring", "emi bounce"],
+    "debt":         ["debt", "credit", "lending app", "bnpl", "borrow", "loan stack", "over-leverag", "overleverag"],
+}
+
+def _fuzzy_stress_type(raw: str) -> str:
+    """Map free-text LLM stress type to canonical enum used by stress_ranking."""
+    low = raw.lower().strip()
+    # Exact match first
+    if low in ("income_shock", "overspending", "structural", "debt"):
+        return low
+    # Keyword scan
+    for canonical, keywords in _STRESS_KEYWORDS.items():
+        if any(kw in low for kw in keywords):
+            return canonical
+    return "unknown"
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 def agent2_compliance(state: Main_context) -> dict:
     """
     Phase 1: Hard stops (4 flags) - immediate rejection
@@ -96,7 +118,8 @@ def agent2_compliance(state: Main_context) -> dict:
         }
 
     # PHASE 2: Build eligible interventions + stress-based ranking
-    stress_type = state.get("Stress_context", {}).get("stress_type", "unknown")
+    raw_stress = state.get("Stress_context", {}).get("stress_type", "unknown")
+    stress_type = _fuzzy_stress_type(raw_stress)
     severity = state.get("Stress_context", {}).get("severity", "low")
 
     # Base eligible interventions
@@ -331,29 +354,36 @@ def voice_prep_node(state: Main_context) -> dict:
     stress = state.get("Stress_context", {})
 
     # Map intervention method to human-readable offer detail
-    OFFER_DETAILS = {
+    offer_detail_map = {
         "payment_holiday": (
-            "a 3-month payment holiday where your EMI pauses completely — "
-            "no penalty, no missed payment recorded, payments resume automatically in month 4"
+            "a payment holiday — we can pause your next payment and give you "
+            "some breathing room with no penalties"
         ),
         "restructuring": (
-            "a revised payment schedule where we restructure your loan — "
-            "lower monthly payments spread over an extended tenure, "
-            "a specialist will walk you through the exact numbers"
+            "a loan restructuring option — we can reduce your monthly payment "
+            "amount to something more manageable"
         ),
         "rm_call": (
             "a direct call with your relationship manager who can personalise "
             "a solution for your specific situation — no forms, no waiting"
         ),
         "financial_counseling": (
-            "a session with our financial advisor who can help you build "
-            "a practical plan to manage your payments going forward"
+            "a free 20-minute session with one of our financial advisors "
+            "who can help you plan ahead"
         ),
         "monitor_only": None,
     }
 
+    specialist_map = {
+        "payment_holiday":      "our payments team who will activate that for you right away",
+        "restructuring":        "our restructuring specialist who will get that sorted for you",
+        "financial_counseling": "one of our financial advisors for a free personalised session",
+        "rm_call":              "your relationship manager who can discuss personalised options with you directly",
+        "monitor_only":         "our support team",
+    }
+
     intervention = state.get("Intervention_method", "monitor_only")
-    offer_detail = OFFER_DETAILS.get(intervention)
+    offer_detail = offer_detail_map.get(intervention)
 
     if not offer_detail:
         # monitor_only — no voice call needed
@@ -375,6 +405,8 @@ def voice_prep_node(state: Main_context) -> dict:
         "emi_date": "your upcoming payment date",  # comes from your data pipeline
         "offer_type": intervention,
         "offer_detail": offer_detail,
+        "specialist": specialist_map.get(intervention, specialist_map["rm_call"]),
+        "intervention_method": intervention,
         "tone": state.get("Message_Tone", "Empathetic"),
         "message_tone": state.get("Message_Tone", "Empathetic"),
         "stress": {

@@ -8,6 +8,7 @@ from kafka import KafkaConsumer
 from db.postgres import get_connection
 from db.cassandra_component import get_session
 from sqlalchemy import text
+import httpx
 
 KAFKA_TOPIC = "customer-weekly-observations"
 KAFKA_BROKER = "localhost:9092"
@@ -15,7 +16,7 @@ KAFKA_BROKER = "localhost:9092"
 consumer = KafkaConsumer(
     KAFKA_TOPIC,
     bootstrap_servers=KAFKA_BROKER,
-    auto_offset_reset="earliest",
+    auto_offset_reset="latest",
     enable_auto_commit=True,
     group_id="pre-delinquency-consumer",
     value_deserializer=lambda m: json.loads(m.decode("utf-8")),
@@ -24,6 +25,36 @@ consumer = KafkaConsumer(
 cassandra_session = get_session()
 
 print(f"[Consumer] Listening on topic '{KAFKA_TOPIC}'...\n")
+
+
+STRESS_THRESHOLDS = {
+    "salary_delay_days":          3,
+    "auto_debit_failures":        2,
+    "savings_drawdown_pct":       -20.0,
+    "utility_payment_delay_days": 3,
+}
+API_BASE = "http://localhost:8000"
+
+def should_trigger(record: dict) -> bool:
+    return (
+        record.get("salary_delay_days", 0)         >  STRESS_THRESHOLDS["salary_delay_days"] or
+        record.get("auto_debit_failures", 0)        >= STRESS_THRESHOLDS["auto_debit_failures"] or
+        record.get("savings_drawdown_pct", 0.0)     <  STRESS_THRESHOLDS["savings_drawdown_pct"] or
+        record.get("utility_payment_delay_days", 0) >  STRESS_THRESHOLDS["utility_payment_delay_days"]
+    )
+
+def fire_intervention(record: dict):
+    """Pass raw Kafka message to API — predict() computes score there, not here."""
+    try:
+        response = httpx.post(
+            f"{API_BASE}/intervene/{record['customer_id']}",
+            json={"kafka_message": record},
+            timeout=120.0,  # voice agent needs time
+        )
+        print(f"[Trigger] {record['customer_id']} → HTTP {response.status_code}")
+    except Exception as e:
+        print(f"[Trigger] Failed for {record['customer_id']}: {e}")
+        # Never raise — consumer must not crash because API is slow or down
 
 
 def insert_into_postgres(record: dict):
@@ -185,3 +216,9 @@ for message in consumer:
           f"default_risk={record['will_default_next_2_4_weeks']}")
 
     insert_into_db(record)
+
+    from db.redis_client import invalidate_customer
+    invalidate_customer(record["customer_id"])  # fresh data arrived, bust cache
+
+    if should_trigger(record):
+        fire_intervention(record)

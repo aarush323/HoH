@@ -39,3 +39,34 @@ def test_connection():
 
 if __name__ == "__main__":
     test_connection()
+
+
+# ── Helper functions for caching ──────────────────────────────────────────────
+import json
+
+def cache_features(customer_id: str, features: dict):
+    client.setex(f"features:{customer_id}", REDIS_TTL["feature"], json.dumps(features))
+
+def get_cached_features(customer_id: str) -> dict | None:
+    val = client.get(f"features:{customer_id}")
+    return json.loads(val) if val else None
+
+def cache_risk_score(customer_id: str, score_data: dict):
+    client.setex(f"risk:{customer_id}", REDIS_TTL["risk_score"], json.dumps(score_data))
+
+def get_cached_risk_score(customer_id: str) -> dict | None:
+    val = client.get(f"risk:{customer_id}")
+    return json.loads(val) if val else None
+
+def cache_session(customer_id: str, session_data: dict):
+    client.setex(f"session:{customer_id}", REDIS_TTL["stress_session"], json.dumps(session_data))
+
+def get_cached_session(customer_id: str) -> dict | None:
+    val = client.get(f"session:{customer_id}")
+    return json.loads(val) if val else None
+
+def invalidate_customer(customer_id: str):
+    """Call when fresh Kafka data arrives — forces recompute on next score request."""
+    client.delete(f"features:{customer_id}")
+    client.delete(f"risk:{customer_id}")
+    client.delete(f"session:{customer_id}")

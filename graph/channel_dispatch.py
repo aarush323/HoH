@@ -23,17 +23,9 @@ def select_channel(state: Main_context) -> str:
     if intervention == "monitor_only":
         return "none"
 
-    # High risk + High relationship = voice preferred
-    if risk_level in ["high", "very high", "very_high"] and relationship == "high":
+    # Voice for ALL high/medium risk — intervention type only affects the script
+    if risk_level in ["high", "very high", "very_high", "medium"]:
         return "voice"
-
-    # High risk + Medium/Low relationship = sms_whatsapp
-    if risk_level in ["high", "very high", "very_high"]:
-        return "sms_whatsapp"
-
-    # Medium risk = sms_whatsapp or email
-    if risk_level == "medium":
-        return "sms_whatsapp"
 
     # Low risk = email
     return "email"
