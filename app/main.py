@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from graph import build_graph
 from graph.state import Main_context
-
+from app.ml_engine import get_real_score, get_real_shap
 
 def predict(kafka_message: dict) -> dict:
     import random
@@ -22,16 +22,22 @@ def predict(kafka_message: dict) -> dict:
     savings_drawdown = kafka_message.get("savings_drawdown_pct", 0.0)
     utility_delay    = kafka_message.get("utility_payment_delay_days", 0)
 
-    # ── MOCK SCORING — replace this block with real model call when ML is ready ──
-    base_score = min(0.99, (
-        (salary_delay / 10)          * 0.25 +
-        (auto_debit_fail / 5)        * 0.30 +
-        (abs(savings_drawdown) / 100)* 0.25 +
-        (utility_delay / 10)         * 0.20
-    ))
-    noise      = random.uniform(-0.05, 0.05)
-    risk_score = round(min(0.99, max(0.01, base_score + noise)), 4)
-    # ── END MOCK SCORING ──────────────────────────────────────────────────────────
+    # ── SCORING — real model with mock fallback ──────────────────────────────────
+    real_score = get_real_score(customer_id)
+    if real_score is not None:
+        risk_score = round(real_score, 4)
+        _used_real_model = True
+    else:
+        base_score = min(0.99, (
+            (salary_delay / 10)          * 0.25 +
+            (auto_debit_fail / 5)        * 0.30 +
+            (abs(savings_drawdown) / 100)* 0.25 +
+            (utility_delay / 10)         * 0.20
+        ))
+        noise      = random.uniform(-0.05, 0.05)
+        risk_score = round(min(0.99, max(0.01, base_score + noise)), 4)
+        _used_real_model = False
+    # ── END SCORING ───────────────────────────────────────────────────────────────
 
     if risk_score >= 0.70:
         risk_level = "High"
@@ -40,79 +46,101 @@ def predict(kafka_message: dict) -> dict:
     else:
         risk_level = "Low"
 
-    # ── MOCK SHAP — replace with real SHAP explainer output when ML is ready ──
-    def shap_contrib(value, max_val, base_range):
-        intensity = min(1.0, abs(value) / max_val) if max_val else 0
-        return round(
-            random.uniform(base_range[0], base_range[1]) * max(intensity, 0.1), 4
-        )
+    # ── SHAP — real explainer with mock fallback ─────────────────────────────────
+    real_shap = get_real_shap(customer_id)
+    if real_shap is not None:
+        # Convert the real SHAP output into the shap_factors format the rest
+        # of the pipeline (stress_context / LLM) expects.
+        shap_factors = []
+        for feat, val in real_shap.get("lgb_top3_signals", {}).items():
+            shap_factors.append({
+                "feature": feat,
+                "value": val,
+                "contribution": abs(val),
+                "direction": "increases_risk" if val > 0 else "decreases_risk",
+            })
+        for feat, val in real_shap.get("gru_top3_signals", {}).items():
+            shap_factors.append({
+                "feature": feat,
+                "value": val,
+                "contribution": abs(val),
+                "direction": "increases_risk" if val > 0 else "decreases_risk",
+            })
+        # Keep top 4 by contribution, matching downstream expectations
+        shap_factors = sorted(shap_factors, key=lambda x: x["contribution"],
+                              reverse=True)[:4]
+    else:
+        # ── mock SHAP fallback ───────────────────────────────────────────
+        def shap_contrib(value, max_val, base_range):
+            intensity = min(1.0, abs(value) / max_val) if max_val else 0
+            return round(
+                random.uniform(base_range[0], base_range[1]) * max(intensity, 0.1), 4
+            )
 
-    # Build SHAP dynamically based on which signals are actually elevated
-    all_signals = [
-        {
-            "feature": "salary_delay_days",
-            "value": salary_delay,
-            "contribution": shap_contrib(salary_delay, 10, (0.10, 0.22)),
-            "direction": "+" if salary_delay > 0 else "-",
-            "stress_hint": "income"
-        },
-        {
-            "feature": "savings_drawdown_pct",
-            "value": savings_drawdown,
-            "contribution": shap_contrib(savings_drawdown, 100, (0.08, 0.18)),
-            "direction": "+" if savings_drawdown < 0 else "-",
-            "stress_hint": "income"
-        },
-        {
-            "feature": "auto_debit_failures",
-            "value": auto_debit_fail,
-            "contribution": shap_contrib(auto_debit_fail, 5, (0.12, 0.25)),
-            "direction": "+" if auto_debit_fail > 0 else "-",
-            "stress_hint": "structural"
-        },
-        {
-            "feature": "utility_payment_delay_days",
-            "value": kafka_message.get("utility_payment_delay_days", 0),
-            "contribution": shap_contrib(kafka_message.get("utility_payment_delay_days", 0), 10, (0.06, 0.14)),
-            "direction": "+" if kafka_message.get("utility_payment_delay_days", 0) > 0 else "-",
-            "stress_hint": "structural"
-        },
-        {
-            "feature": "upi_to_lending_apps_count",
-            "value": kafka_message.get("upi_to_lending_apps_count", 0),
-            "contribution": shap_contrib(kafka_message.get("upi_to_lending_apps_count", 0), 10, (0.10, 0.20)),
-            "direction": "+" if kafka_message.get("upi_to_lending_apps_count", 0) > 0 else "-",
-            "stress_hint": "debt"
-        },
-        {
-            "feature": "gambling_lottery_spend_inr",
-            "value": kafka_message.get("gambling_lottery_spend_inr", 0),
-            "contribution": shap_contrib(kafka_message.get("gambling_lottery_spend_inr", 0), 5000, (0.08, 0.16)),
-            "direction": "+" if kafka_message.get("gambling_lottery_spend_inr", 0) > 0 else "-",
-            "stress_hint": "overspending"
-        },
-        {
-            "feature": "discretionary_vs_4w_avg_pct",
-            "value": kafka_message.get("discretionary_vs_4w_avg_pct", 0),
-            "contribution": shap_contrib(kafka_message.get("discretionary_vs_4w_avg_pct", 0), 100, (0.07, 0.15)),
-            "direction": "+" if kafka_message.get("discretionary_vs_4w_avg_pct", 0) > 20 else "-",
-            "stress_hint": "overspending"
-        },
-        {
-            "feature": "credit_card_utilization_pct",
-            "value": kafka_message.get("credit_card_utilization_pct", 0),
-            "contribution": shap_contrib(kafka_message.get("credit_card_utilization_pct", 0), 100, (0.09, 0.18)),
-            "direction": "+" if kafka_message.get("credit_card_utilization_pct", 0) > 70 else "-",
-            "stress_hint": "debt"
-        },
-    ]
+        all_signals = [
+            {
+                "feature": "salary_delay_days",
+                "value": salary_delay,
+                "contribution": shap_contrib(salary_delay, 10, (0.10, 0.22)),
+                "direction": "+" if salary_delay > 0 else "-",
+                "stress_hint": "income"
+            },
+            {
+                "feature": "savings_drawdown_pct",
+                "value": savings_drawdown,
+                "contribution": shap_contrib(savings_drawdown, 100, (0.08, 0.18)),
+                "direction": "+" if savings_drawdown < 0 else "-",
+                "stress_hint": "income"
+            },
+            {
+                "feature": "auto_debit_failures",
+                "value": auto_debit_fail,
+                "contribution": shap_contrib(auto_debit_fail, 5, (0.12, 0.25)),
+                "direction": "+" if auto_debit_fail > 0 else "-",
+                "stress_hint": "structural"
+            },
+            {
+                "feature": "utility_payment_delay_days",
+                "value": kafka_message.get("utility_payment_delay_days", 0),
+                "contribution": shap_contrib(kafka_message.get("utility_payment_delay_days", 0), 10, (0.06, 0.14)),
+                "direction": "+" if kafka_message.get("utility_payment_delay_days", 0) > 0 else "-",
+                "stress_hint": "structural"
+            },
+            {
+                "feature": "upi_to_lending_apps_count",
+                "value": kafka_message.get("upi_to_lending_apps_count", 0),
+                "contribution": shap_contrib(kafka_message.get("upi_to_lending_apps_count", 0), 10, (0.10, 0.20)),
+                "direction": "+" if kafka_message.get("upi_to_lending_apps_count", 0) > 0 else "-",
+                "stress_hint": "debt"
+            },
+            {
+                "feature": "gambling_lottery_spend_inr",
+                "value": kafka_message.get("gambling_lottery_spend_inr", 0),
+                "contribution": shap_contrib(kafka_message.get("gambling_lottery_spend_inr", 0), 5000, (0.08, 0.16)),
+                "direction": "+" if kafka_message.get("gambling_lottery_spend_inr", 0) > 0 else "-",
+                "stress_hint": "overspending"
+            },
+            {
+                "feature": "discretionary_vs_4w_avg_pct",
+                "value": kafka_message.get("discretionary_vs_4w_avg_pct", 0),
+                "contribution": shap_contrib(kafka_message.get("discretionary_vs_4w_avg_pct", 0), 100, (0.07, 0.15)),
+                "direction": "+" if kafka_message.get("discretionary_vs_4w_avg_pct", 0) > 20 else "-",
+                "stress_hint": "overspending"
+            },
+            {
+                "feature": "credit_card_utilization_pct",
+                "value": kafka_message.get("credit_card_utilization_pct", 0),
+                "contribution": shap_contrib(kafka_message.get("credit_card_utilization_pct", 0), 100, (0.09, 0.18)),
+                "direction": "+" if kafka_message.get("credit_card_utilization_pct", 0) > 70 else "-",
+                "stress_hint": "debt"
+            },
+        ]
 
-    # Pick top 4 by contribution, but ensure we include the dominant stress signals
-    elevated = [s for s in all_signals if abs(s["value"]) > 0]
-    elevated_sorted = sorted(elevated, key=lambda x: x["contribution"], reverse=True)
-    shap_factors = [{k: v for k, v in s.items() if k != "stress_hint"}
-                    for s in elevated_sorted[:4]]
-    # ── END MOCK SHAP ─────────────────────────────────────────────────────────────
+        elevated = [s for s in all_signals if abs(s["value"]) > 0]
+        elevated_sorted = sorted(elevated, key=lambda x: x["contribution"], reverse=True)
+        shap_factors = [{k: v for k, v in s.items() if k != "stress_hint"}
+                        for s in elevated_sorted[:4]]
+    # ── END SHAP ──────────────────────────────────────────────────────────────────
 
     customer_profile = {
         "customer_id":             customer_id,
@@ -190,7 +218,7 @@ def predict(kafka_message: dict) -> dict:
         "shap_factors":   shap_factors,
         "customer_profile": customer_profile,
         "timestamp":      datetime.utcnow().isoformat(),
-        "model_version":  "mock-1.0.0",
+        "model_version":  "ensemble-1.0.0" if _used_real_model else "mock-1.0.0",
     }
 
 
