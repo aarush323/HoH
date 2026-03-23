@@ -41,7 +41,7 @@ services:
     image: postgres:15
     container_name: postgres
     ports:
-      - "5433:5433"
+      - "5433:5432"
     environment:
       POSTGRES_DB: pre_delinquency
       POSTGRES_USER: admin
@@ -68,7 +68,7 @@ services:
     networks:
       - predelinquency_net
     healthcheck:
-      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      test: [ "CMD", "cqlsh", "-e", "describe keyspaces" ]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -76,6 +76,7 @@ services:
 volumes:
   pg_data:
   cassandra_data:
+
 
 networks:
   predelinquency_net:

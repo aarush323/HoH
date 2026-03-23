@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from graph import build_graph
 from graph.state import Main_context
 from app.main import predict
+from pipeline.producer import run_producer
 from db.queries import (
     get_all_customers_with_risk,
     get_customer_full_profile,
@@ -172,6 +173,13 @@ async def update_rules(request: Request):
     return {"status": "noted", "note": "Rule updates apply when ML model is connected"}
 
 
+@app.post("/trigger-producer")
+def trigger_producer():
+    """Manual trigger to stream demo customers into Kafka."""
+    count = run_producer()
+    return {"status": "success", "messages_sent": count}
+
+
 @app.get("/audit")
 def get_all_audit():
     return get_audit_log()
@@ -183,14 +191,21 @@ def get_customer_audit(customer_id: str):
 
 @app.get("/stream")
 async def stream_risk():
+    """Server-Sent Events stream for live risk updates."""
+    from fastapi.concurrency import run_in_threadpool
+    
     async def event_generator():
         while True:
             try:
-                customers = get_all_customers_with_risk()
+                # Use run_in_threadpool to offload blocking DB query
+                customers = await run_in_threadpool(get_all_customers_with_risk)
+                # print(f"[SSE] Sending {len(customers)} customers") # Debugging log
                 yield f"data: {json.dumps(customers, default=str)}\n\n"
             except Exception as e:
+                print(f"[SSE Error] {e}")
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
-            await asyncio.sleep(3)
+            await asyncio.sleep(2)
+            
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 

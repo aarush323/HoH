@@ -34,6 +34,7 @@ export const api = {
         get<AuditRecord[]>(id ? `/audit/${id}` : '/audit'),
     getRules: () => get<Rules>('/rules'),
     getHealth: () => get<{ status: string; model: string }>('/health'),
+    triggerProducer: () => post<{ status: string; messages_sent: number }>('/trigger-producer'),
 };
 
 // SSE stream hook helper

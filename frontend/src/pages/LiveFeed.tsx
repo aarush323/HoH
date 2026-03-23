@@ -1,9 +1,24 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLiveFeed } from '../context/LiveFeedContext'
+import { api } from '../api/client'
+import { Zap, Play } from 'lucide-react'
 
 export default function LiveFeed() {
     const { customers, eventCount, lastUpdate, connected } = useLiveFeed()
     const navigate = useNavigate()
+    const [isSimulating, setIsSimulating] = useState(false)
+
+    const handleStartSimulation = async () => {
+        setIsSimulating(true)
+        try {
+            await api.triggerProducer()
+        } catch (err) {
+            console.error('Failed to trigger simulation:', err)
+        } finally {
+            setIsSimulating(false)
+        }
+    }
 
     const counts = { High: 0, Medium: 0, Low: 0 }
     customers.forEach((c) => {
@@ -20,16 +35,35 @@ export default function LiveFeed() {
                     </span>
                     <h1 className="text-[1.75rem] font-bold tracking-tight text-zinc-900 leading-none">Live Feed</h1>
                 </div>
+                
                 <div className="flex items-center gap-6">
+                    {/* Trigger Button */}
+                    <button 
+                        onClick={handleStartSimulation}
+                        disabled={isSimulating}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                            isSimulating 
+                            ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed' 
+                            : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95'
+                        }`}
+                    >
+                        {isSimulating ? (
+                            <div className="w-3 h-3 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <Play fill="currentColor" size={12} />
+                        )}
+                        {isSimulating ? 'Streaming...' : 'Start Simulation'}
+                    </button>
+
                     {/* Status */}
                     <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-500 animate-pulse-dot' : 'bg-red-500'}`} />
                         <span className="text-xs font-semibold text-zinc-600">{connected ? 'Connected' : 'Disconnected'}</span>
                     </div>
-                    <div className="text-xs text-zinc-400 tabular">
+                    <div className="text-xs text-zinc-400 tabular hidden sm:block">
                         Events: <span className="font-bold text-zinc-700">{eventCount}</span>
                     </div>
-                    <div className="text-xs text-zinc-400">
+                    <div className="text-xs text-zinc-400 hidden lg:block">
                         Last: <span className="font-medium text-zinc-600">{lastUpdate ? lastUpdate.toLocaleTimeString() : '—'}</span>
                     </div>
                     {/* Risk pills */}

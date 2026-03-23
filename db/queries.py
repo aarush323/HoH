@@ -7,11 +7,15 @@ from db.postgres import get_connection
 
 def _compute_base_score(row) -> tuple[float, str]:
     """Deterministic score with no noise — for list views and caching."""
+    def val(obj, attr):
+        v = getattr(obj, attr, 0)
+        return float(v) if v is not None else 0.0
+
     score = min(0.99, (
-        (getattr(row, "salary_delay_days", 0) / 10)           * 0.25 +
-        (getattr(row, "auto_debit_failures", 0) / 5)          * 0.30 +
-        (abs(getattr(row, "savings_drawdown_pct", 0)) / 100)  * 0.25 +
-        (getattr(row, "utility_payment_delay_days", 0) / 10)  * 0.20
+        (val(row, "salary_delay_days") / 10)           * 0.25 +
+        (val(row, "auto_debit_failures") / 5)          * 0.30 +
+        (abs(val(row, "savings_drawdown_pct")) / 100)  * 0.25 +
+        (val(row, "utility_payment_delay_days") / 10)  * 0.20
     ))
     level = "High" if score >= 0.70 else "Medium" if score >= 0.40 else "Low"
     return round(score, 4), level
