@@ -11,15 +11,16 @@ from sqlalchemy import text
 import httpx
 
 KAFKA_TOPIC = "customer-weekly-observations"
-KAFKA_BROKER = "localhost:9092"
+KAFKA_BROKER = "127.0.0.1:9093"
 
 consumer = KafkaConsumer(
     KAFKA_TOPIC,
     bootstrap_servers=KAFKA_BROKER,
-    auto_offset_reset="latest",
+    auto_offset_reset="earliest",
     enable_auto_commit=True,
     group_id="pre-delinquency-consumer",
     value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+    api_version=(2, 0, 2), 
 )
 
 cassandra_session = get_session()

@@ -4,13 +4,14 @@ import time
 from kafka import KafkaProducer
 
 KAFKA_TOPIC = "customer-weekly-observations"
-KAFKA_BROKER = "localhost:9092"
+KAFKA_BROKER = "127.0.0.1:9093"
 CSV_FILE = "pipeline/pre_delinquency_dataset.csv"
 DELAY_SECONDS = 0.05
 
 producer = KafkaProducer(
     bootstrap_servers=KAFKA_BROKER,
     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+    api_version=(2, 0, 2), 
 )
 DEMO_CUSTOMERS = {"C00011", "C00078", "C00002"}
 print(f"[Producer] Connected to Kafka. Streaming '{CSV_FILE}' → topic '{KAFKA_TOPIC}'...")

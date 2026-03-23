@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-dim": "#dadada",
+                        "inverse-primary": "#b4c5ff",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "primary-container": "#2563eb",
+                        "surface-tint": "#0053db",
+                        "secondary-container": "#acbfff",
+                        "on-tertiary-fixed-variant": "#7d2d00",
+                        "surface-container-lowest": "#ffffff",
+                        "on-surface": "#1a1c1c",
+                        "surface-variant": "#e2e2e2",
+                        "secondary-fixed-dim": "#b4c5ff",
+                        "primary-fixed": "#dbe1ff",
+                        "secondary": "#495c95",
+                        "tertiary": "#943700",
+                        "outline-variant": "#c3c6d7",
+                        "on-primary-fixed": "#00174b",
+                        "surface-container": "#eeeeee",
+                        "background": "#f9f9f9",
+                        "tertiary-container": "#bc4800",
+                        "on-tertiary": "#ffffff",
+                        "outline": "#737686",
+                        "on-secondary-fixed": "#00174b",
+                        "tertiary-fixed-dim": "#ffb596",
+                        "on-tertiary-fixed": "#360f00",
+                        "secondary-fixed": "#dbe1ff",
+                        "inverse-surface": "#2f3131",
+                        "tertiary-fixed": "#ffdbcd",
+                        "surface-container-highest": "#e2e2e2",
+                        "on-error-container": "#93000a",
+                        "surface-container-low": "#f3f3f3",
+                        "on-secondary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "surface": "#f9f9f9",
+                        "on-tertiary-container": "#ffede6",
+                        "on-background": "#1a1c1c",
+                        "on-surface-variant": "#434655",
+                        "primary": "#004ac6",
+                        "surface-container-high": "#e8e8e8",
+                        "surface-bright": "#f9f9f9",
+                        "on-secondary-fixed-variant": "#31447b",
+                        "on-error": "#ffffff",
+                        "on-secondary-container": "#394c84",
+                        "on-primary-container": "#eeefff",
+                        "on-primary": "#ffffff",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "error": "#ba1a1a",
+                        "inverse-on-surface": "#f0f1f1"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .risk-pulse {
+            box-shadow: 0 0 0 0 rgba(186, 26, 26, 0.4);
+            animation: pulse-red 2s infinite;
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(186, 26, 26, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(186, 26, 26, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(186, 26, 26, 0); }
+        }
+        .live-dot {
+            animation: blink 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .3; }
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body antialiased">
+<!-- Top Navigation Bar (Shared Component) -->
+<header class="bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm dark:shadow-none fixed top-0 w-full z-50">
+<div class="flex justify-between items-center h-16 px-8 w-full max-w-[1440px] mx-auto font-inter antialiased tracking-tight text-sm font-medium">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-bold tracking-tighter text-slate-900 dark:text-slate-50">HoH</span>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors duration-200 scale-95 active:scale-90 transition-transform" href="#">Dashboard</a>
+<a class="text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 pb-1 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors duration-200 scale-95 active:scale-90 transition-transform" href="#">Live Feed</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors duration-200 scale-95 active:scale-90 transition-transform" href="#">Customer Journey</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors duration-200 scale-95 active:scale-90 transition-transform" href="#">Portfolio</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors duration-200 scale-95 active:scale-90 transition-transform" href="#">Shock Events</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors duration-200 scale-95 active:scale-90 transition-transform" href="#">Outreach</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 text-slate-500 mr-4">
+<span class="material-symbols-outlined text-[20px]">sensors</span>
+<span class="material-symbols-outlined text-[20px]">database</span>
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</div>
+<button class="bg-primary text-on-primary px-4 py-2 rounded-full font-semibold hover:opacity-90 transition-opacity scale-95 active:scale-90">Outreach Queue</button>
+</div>
+</div>
+</header>
+<main class="pt-24 pb-12 px-8 max-w-[1440px] mx-auto">
+<!-- Live Status Strip -->
+<section class="mb-10 flex flex-wrap items-center justify-between gap-6 bg-surface-container-low p-4 rounded-2xl border border-outline-variant/10 shadow-sm">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="live-dot w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="text-xs font-bold tracking-widest text-emerald-600 uppercase">LIVE</span>
+</div>
+<div class="h-4 w-[1px] bg-outline-variant/30"></div>
+<div class="flex flex-col">
+<span class="text-[10px] text-outline font-bold uppercase tracking-wider">Events</span>
+<span class="text-sm font-semibold tabular-nums">1,247</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] text-outline font-bold uppercase tracking-wider">Sync</span>
+<span class="text-sm font-semibold tabular-nums">Updated 2s ago</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-error-container text-on-error-container border border-error/10">
+<span class="text-[10px] font-bold uppercase">High</span>
+<span class="text-sm font-bold tabular-nums">18</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+<span class="text-[10px] font-bold uppercase">Medium</span>
+<span class="text-sm font-bold tabular-nums">47</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+<span class="text-[10px] font-bold uppercase">Low</span>
+<span class="text-sm font-bold tabular-nums">312</span>
+</div>
+</div>
+</section>
+<!-- Customer Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Card CUS-9773 (Critical) -->
+<a class="group block bg-surface-container-lowest rounded-2xl border-2 border-error risk-pulse p-6 transition-all hover:translate-y-[-4px] hover:shadow-xl relative overflow-hidden" href="/customer/CUS-9773">
+<div class="flex justify-between items-start mb-4">
+<div>
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">Account ID</span>
+<h3 class="text-lg font-bold text-on-surface">CUS-9773</h3>
+</div>
+<div class="text-right">
+<span class="text-[10px] font-bold text-error uppercase tracking-tighter">Risk Score</span>
+<div class="text-2xl font-black text-error tabular-nums tracking-tighter">0.99</div>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 mb-6">
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Home Loan</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Premium</span>
+<span class="px-2 py-0.5 rounded bg-error-container/40 text-[11px] font-bold text-error">Salary Delay +17d</span>
+<span class="px-2 py-0.5 rounded bg-error-container/40 text-[11px] font-bold text-error">Auto Debit ×3</span>
+<span class="px-2 py-0.5 rounded bg-error-container/40 text-[11px] font-bold text-error">Savings ↓18%</span>
+</div>
+<div class="flex justify-between items-center text-outline text-xs border-t border-outline-variant/10 pt-4">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">schedule</span> Real-time</span>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</div>
+</a>
+<!-- Card CUS-1453 (High) -->
+<a class="group block bg-surface-container-lowest rounded-2xl border border-outline-variant/50 p-6 transition-all hover:translate-y-[-4px] hover:shadow-lg" href="/customer/CUS-1453">
+<div class="flex justify-between items-start mb-4">
+<div>
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">Account ID</span>
+<h3 class="text-lg font-bold text-on-surface">CUS-1453</h3>
+</div>
+<div class="text-right">
+<span class="text-[10px] font-bold text-error uppercase tracking-tighter">Risk Score</span>
+<div class="text-2xl font-black text-error tabular-nums tracking-tighter">0.77</div>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 mb-6">
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Personal Loan</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Regular</span>
+<span class="px-2 py-0.5 rounded bg-error-container/30 text-[11px] font-bold text-error">Lending App UPI ×8</span>
+<span class="px-2 py-0.5 rounded bg-error-container/30 text-[11px] font-bold text-error">Credit Util 87%</span>
+</div>
+<div class="flex justify-between items-center text-outline text-xs border-t border-outline-variant/10 pt-4">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">trending_up</span> Escalating</span>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</div>
+</a>
+<!-- Card CUS-6844 (Medium) -->
+<a class="group block bg-surface-container-lowest rounded-2xl border border-outline-variant/50 p-6 transition-all hover:translate-y-[-4px] hover:shadow-lg" href="/customer/CUS-6844">
+<div class="flex justify-between items-start mb-4">
+<div>
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">Account ID</span>
+<h3 class="text-lg font-bold text-on-surface">CUS-6844</h3>
+</div>
+<div class="text-right">
+<span class="text-[10px] font-bold text-orange-600 uppercase tracking-tighter">Risk Score</span>
+<div class="text-2xl font-black text-orange-600 tabular-nums tracking-tighter">0.65</div>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 mb-6">
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Credit Card</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Premium</span>
+<span class="px-2 py-0.5 rounded bg-orange-100 text-[11px] font-bold text-orange-800">Discretionary ↑34%</span>
+<span class="px-2 py-0.5 rounded bg-orange-100 text-[11px] font-bold text-orange-800">Min Payment Only</span>
+</div>
+<div class="flex justify-between items-center text-outline text-xs border-t border-outline-variant/10 pt-4">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">visibility</span> Monitoring</span>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</div>
+</a>
+<!-- Card CUS-2291 (Medium) -->
+<a class="group block bg-surface-container-lowest rounded-2xl border border-outline-variant/50 p-6 transition-all hover:translate-y-[-4px] hover:shadow-lg" href="/customer/CUS-2291">
+<div class="flex justify-between items-start mb-4">
+<div>
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">Account ID</span>
+<h3 class="text-lg font-bold text-on-surface">CUS-2291</h3>
+</div>
+<div class="text-right">
+<span class="text-[10px] font-bold text-orange-600 uppercase tracking-tighter">Risk Score</span>
+<div class="text-2xl font-black text-orange-600 tabular-nums tracking-tighter">0.54</div>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 mb-6">
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Auto Loan</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Regular</span>
+<span class="px-2 py-0.5 rounded bg-orange-100 text-[11px] font-bold text-orange-800">Salary Delay +4d</span>
+<span class="px-2 py-0.5 rounded bg-orange-100 text-[11px] font-bold text-orange-800">Late Utility</span>
+</div>
+<div class="flex justify-between items-center text-outline text-xs border-t border-outline-variant/10 pt-4">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">history</span> Emerging</span>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</div>
+</a>
+<!-- Card CUS-8823 (Low) -->
+<a class="group block bg-surface-container-lowest rounded-2xl border border-outline-variant/50 p-6 transition-all hover:translate-y-[-4px] hover:shadow-lg" href="/customer/CUS-8823">
+<div class="flex justify-between items-start mb-4">
+<div>
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">Account ID</span>
+<h3 class="text-lg font-bold text-on-surface">CUS-8823</h3>
+</div>
+<div class="text-right">
+<span class="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">Risk Score</span>
+<div class="text-2xl font-black text-emerald-600 tabular-nums tracking-tighter">0.31</div>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 mb-6">
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Personal Loan</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Regular</span>
+<span class="px-2 py-0.5 rounded bg-emerald-100 text-[11px] font-bold text-emerald-800">ATM Spike ↑</span>
+</div>
+<div class="flex justify-between items-center text-outline text-xs border-t border-outline-variant/10 pt-4">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">check_circle</span> Stable</span>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</div>
+</a>
+<!-- Card CUS-4401 (Low) -->
+<a class="group block bg-surface-container-lowest rounded-2xl border border-outline-variant/50 p-6 transition-all hover:translate-y-[-4px] hover:shadow-lg" href="/customer/CUS-4401">
+<div class="flex justify-between items-start mb-4">
+<div>
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">Account ID</span>
+<h3 class="text-lg font-bold text-on-surface">CUS-4401</h3>
+</div>
+<div class="text-right">
+<span class="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">Risk Score</span>
+<div class="text-2xl font-black text-emerald-600 tabular-nums tracking-tighter">0.18</div>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 mb-6">
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Home Loan</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-[11px] font-semibold text-on-surface">Premium</span>
+<span class="px-2 py-0.5 rounded bg-emerald-100 text-[11px] font-bold text-emerald-800">Stress Query</span>
+</div>
+<div class="flex justify-between items-center text-outline text-xs border-t border-outline-variant/10 pt-4">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">check_circle</span> Healthy</span>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</div>
+</a>
+</div>
+</main>
+<!-- Bottom Action Floating Button (Suppress Check - Only visible on specific screens) -->
+<button class="fixed bottom-8 right-8 bg-primary text-on-primary w-14 h-14 rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all">
+<span class="material-symbols-outlined">add</span>
+</button>
+</body></html>

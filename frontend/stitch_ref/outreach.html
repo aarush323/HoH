@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Outreach Queue | HoH</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .glass-nav {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "primary-fixed": "#dbe1ff",
+                "surface-variant": "#e2e2e2",
+                "inverse-primary": "#b4c5ff",
+                "secondary-fixed": "#dbe1ff",
+                "error": "#ba1a1a",
+                "on-secondary-fixed-variant": "#31447b",
+                "surface-bright": "#f9f9f9",
+                "surface-tint": "#0053db",
+                "on-primary-fixed-variant": "#003ea8",
+                "tertiary-fixed": "#ffdbcd",
+                "background": "#f9f9f9",
+                "on-tertiary-fixed-variant": "#7d2d00",
+                "surface-dim": "#dadada",
+                "on-secondary-container": "#394c84",
+                "on-surface-variant": "#434655",
+                "on-tertiary-container": "#ffede6",
+                "primary-container": "#2563eb",
+                "surface-container-low": "#f3f3f3",
+                "tertiary": "#943700",
+                "surface-container-high": "#e8e8e8",
+                "primary-fixed-dim": "#b4c5ff",
+                "on-tertiary": "#ffffff",
+                "inverse-surface": "#2f3131",
+                "on-primary-container": "#eeefff",
+                "surface-container-highest": "#e2e2e2",
+                "surface": "#f9f9f9",
+                "outline-variant": "#c3c6d7",
+                "on-secondary": "#ffffff",
+                "on-primary": "#ffffff",
+                "secondary": "#495c95",
+                "primary": "#004ac6",
+                "on-tertiary-fixed": "#360f00",
+                "surface-container": "#eeeeee",
+                "outline": "#737686",
+                "on-secondary-fixed": "#00174b",
+                "on-error-container": "#93000a",
+                "on-background": "#1a1c1c",
+                "on-surface": "#1a1c1c",
+                "tertiary-fixed-dim": "#ffb596",
+                "secondary-fixed-dim": "#b4c5ff",
+                "surface-container-lowest": "#ffffff",
+                "on-primary-fixed": "#00174b",
+                "error-container": "#ffdad6",
+                "tertiary-container": "#bc4800",
+                "on-error": "#ffffff",
+                "secondary-container": "#acbfff",
+                "inverse-on-surface": "#f0f1f1"
+              },
+              fontFamily: {
+                "headline": ["Inter"],
+                "body": ["Inter"],
+                "label": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1.5rem", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+</head>
+<body class="bg-surface text-on-surface antialiased">
+<!-- TopNavBar - Shared Component -->
+<nav class="fixed top-0 w-full z-50 glass-nav border-b border-outline-variant/15 shadow-sm">
+<div class="flex items-center justify-between px-8 h-16 w-full max-w-[1920px] mx-auto font-inter antialiased tracking-tight text-sm font-medium">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold tracking-tighter text-slate-900">HoH</span>
+<div class="hidden md:flex items-center gap-6">
+<a class="text-slate-500 hover:text-slate-700 transition-colors" href="#">Dashboard</a>
+<a class="text-slate-500 hover:text-slate-700 transition-colors" href="#">Live Feed</a>
+<a class="text-slate-500 hover:text-slate-700 transition-colors" href="#">Customer Journey</a>
+<a class="text-slate-500 hover:text-slate-700 transition-colors" href="#">Portfolio</a>
+<a class="text-slate-500 hover:text-slate-700 transition-colors" href="#">Shock Events</a>
+<a class="text-slate-900 border-b-2 border-blue-600 pb-1" href="#">Outreach</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-surface-container rounded-full transition-colors active:scale-95">
+<span class="material-symbols-outlined text-slate-600">sensors</span>
+</button>
+<button class="p-2 hover:bg-surface-container rounded-full transition-colors active:scale-95">
+<span class="material-symbols-outlined text-slate-600">database</span>
+</button>
+<button class="p-2 hover:bg-surface-container rounded-full transition-colors active:scale-95">
+<span class="material-symbols-outlined text-slate-600">terminal</span>
+</button>
+<button class="relative p-2 hover:bg-surface-container rounded-full transition-colors active:scale-95">
+<span class="material-symbols-outlined text-slate-600">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+</button>
+</div>
+</div>
+</nav>
+<main class="pt-24 pb-12 px-8 max-w-[1400px] mx-auto">
+<!-- Header Section -->
+<header class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div>
+<div class="flex items-center gap-3 mb-2">
+<h1 class="text-[1.75rem] font-bold tracking-tight text-on-surface">Outreach Queue</h1>
+<span class="bg-error text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">12 Pending</span>
+</div>
+<p class="text-on-surface-variant text-sm">Review and approve AI-generated intervention messages for high-risk customers.</p>
+</div>
+<!-- Filter Pills -->
+<div class="flex flex-wrap gap-2">
+<button class="px-5 py-2 rounded-full bg-on-surface text-white text-xs font-semibold">All</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant text-xs font-semibold hover:bg-surface-container-high transition-colors">High Risk</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant text-xs font-semibold hover:bg-surface-container-high transition-colors">Medium Risk</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant text-xs font-semibold hover:bg-surface-container-high transition-colors">Voice</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant text-xs font-semibold hover:bg-surface-container-high transition-colors">SMS</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant text-xs font-semibold hover:bg-surface-container-high transition-colors">Email</button>
+</div>
+</header>
+<!-- Queue Cards -->
+<div class="flex flex-col gap-6">
+<!-- Card 1 -->
+<div class="grid grid-cols-1 lg:grid-cols-12 bg-surface-container-lowest border border-outline-variant/15 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300">
+<!-- Section 1: Customer Profile -->
+<div class="lg:col-span-3 p-6 border-r border-outline-variant/10 flex flex-col justify-between bg-surface-container-low/30">
+<div>
+<div class="flex justify-between items-start mb-4">
+<div>
+<span class="block text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Customer ID</span>
+<span class="text-sm font-semibold text-on-surface">CUS-9773</span>
+</div>
+<span class="bg-error/10 text-error text-[10px] font-bold px-2 py-0.5 rounded uppercase">High Risk</span>
+</div>
+<div class="mb-4">
+<span class="block text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Risk Score</span>
+<span class="text-[3.5rem] font-bold leading-none tabular-nums text-on-surface">0.99</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">call</span>
+</div>
+<div>
+<p class="text-xs font-bold text-on-surface">Voice Call</p>
+<p class="text-[11px] text-on-surface-variant">Payment Holiday</p>
+</div>
+</div>
+</div>
+<!-- Section 2: Outreach Content -->
+<div class="lg:col-span-6 p-6 flex flex-col gap-4">
+<div class="relative">
+<span class="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2">Generated Outreach</span>
+<div class="bg-primary/5 border border-primary/10 rounded-xl p-4 text-sm leading-relaxed text-on-surface italic">
+                            "Hi Arjun, we noticed some changes in your recent payment patterns. We understand life can get unpredictable — you may be eligible for a flexible payment option with no penalties."
+                        </div>
+<div class="flex justify-end mt-1">
+<span class="text-[10px] font-medium text-outline">214 / 300 characters</span>
+</div>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-[16px] text-primary">auto_awesome</span>
+<span class="text-[10px] font-bold text-outline uppercase tracking-widest">LLM Justification</span>
+</div>
+<p class="text-xs text-on-surface-variant italic leading-relaxed">
+                            "Severe income shock detected. Salary delayed 17 days with 3 failed auto-debits."
+                        </p>
+</div>
+<div class="flex items-center gap-2 mt-auto">
+<span class="text-[10px] font-bold text-outline uppercase tracking-widest">Tone:</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-[10px] font-bold text-on-surface-variant">Empathetic</span>
+</div>
+</div>
+<!-- Section 3: Actions -->
+<div class="lg:col-span-3 p-6 border-l border-outline-variant/10 flex flex-col justify-center gap-3 bg-surface-container-low/20">
+<button class="w-full py-3 px-4 bg-gradient-to-br from-primary to-primary-container text-white rounded-full text-sm font-semibold shadow-sm hover:scale-[1.02] active:scale-95 transition-all">
+                        Approve &amp; Send
+                    </button>
+<button class="w-full py-3 px-4 border border-[#943700] text-[#943700] rounded-full text-sm font-semibold hover:bg-tertiary-fixed/20 transition-colors active:scale-95">
+                        Edit &amp; Send
+                    </button>
+<div class="flex items-center gap-2 mt-2">
+<button class="flex-1 text-error text-sm font-semibold py-2 hover:bg-error/5 rounded-lg transition-colors">
+                            Reject
+                        </button>
+<button class="p-2 hover:bg-surface-container rounded-lg transition-colors">
+<span class="material-symbols-outlined text-outline">expand_more</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="grid grid-cols-1 lg:grid-cols-12 bg-surface-container-lowest border border-outline-variant/15 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300">
+<div class="lg:col-span-3 p-6 border-r border-outline-variant/10 flex flex-col justify-between bg-surface-container-low/30">
+<div>
+<div class="flex justify-between items-start mb-4">
+<div>
+<span class="block text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Customer ID</span>
+<span class="text-sm font-semibold text-on-surface">CUS-1453</span>
+</div>
+<span class="bg-error/10 text-error text-[10px] font-bold px-2 py-0.5 rounded uppercase">High Risk</span>
+</div>
+<div class="mb-4">
+<span class="block text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Risk Score</span>
+<span class="text-[3.5rem] font-bold leading-none tabular-nums text-on-surface">0.77</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">sms</span>
+</div>
+<div>
+<p class="text-xs font-bold text-on-surface">SMS Message</p>
+<p class="text-[11px] text-on-surface-variant">Financial Counseling</p>
+</div>
+</div>
+</div>
+<div class="lg:col-span-6 p-6 flex flex-col gap-4">
+<div class="relative">
+<span class="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2">Generated Outreach</span>
+<div class="bg-primary/5 border border-primary/10 rounded-xl p-4 text-sm leading-relaxed text-on-surface italic">
+                            "Hi Priya, we've noticed increased activity on lending platforms. Our financial wellness team can help you explore better options. Reply YES to connect."
+                        </div>
+<div class="flex justify-end mt-1">
+<span class="text-[10px] font-medium text-outline">162 / 300 characters</span>
+</div>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-[16px] text-primary">auto_awesome</span>
+<span class="text-[10px] font-bold text-outline uppercase tracking-widest">LLM Justification</span>
+</div>
+<p class="text-xs text-on-surface-variant italic leading-relaxed">
+                            "Debt spiral pattern. 8 UPI transfers to lending apps in 7 days."
+                        </p>
+</div>
+<div class="flex items-center gap-2 mt-auto">
+<span class="text-[10px] font-bold text-outline uppercase tracking-widest">Tone:</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-[10px] font-bold text-on-surface-variant">Supportive</span>
+</div>
+</div>
+<div class="lg:col-span-3 p-6 border-l border-outline-variant/10 flex flex-col justify-center gap-3 bg-surface-container-low/20">
+<button class="w-full py-3 px-4 bg-gradient-to-br from-primary to-primary-container text-white rounded-full text-sm font-semibold shadow-sm hover:scale-[1.02] active:scale-95 transition-all">
+                        Approve &amp; Send
+                    </button>
+<button class="w-full py-3 px-4 border border-[#943700] text-[#943700] rounded-full text-sm font-semibold hover:bg-tertiary-fixed/20 transition-colors active:scale-95">
+                        Edit &amp; Send
+                    </button>
+<div class="flex items-center gap-2 mt-2">
+<button class="flex-1 text-error text-sm font-semibold py-2 hover:bg-error/5 rounded-lg transition-colors">
+                            Reject
+                        </button>
+<button class="p-2 hover:bg-surface-container rounded-lg transition-colors">
+<span class="material-symbols-outlined text-outline">expand_more</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="grid grid-cols-1 lg:grid-cols-12 bg-surface-container-lowest border border-outline-variant/15 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300">
+<div class="lg:col-span-3 p-6 border-r border-outline-variant/10 flex flex-col justify-between bg-surface-container-low/30">
+<div>
+<div class="flex justify-between items-start mb-4">
+<div>
+<span class="block text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Customer ID</span>
+<span class="text-sm font-semibold text-on-surface">CUS-6844</span>
+</div>
+<span class="bg-secondary/10 text-secondary text-[10px] font-bold px-2 py-0.5 rounded uppercase">Medium Risk</span>
+</div>
+<div class="mb-4">
+<span class="block text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Risk Score</span>
+<span class="text-[3.5rem] font-bold leading-none tabular-nums text-on-surface">0.65</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">mail</span>
+</div>
+<div>
+<p class="text-xs font-bold text-on-surface">Email Outreach</p>
+<p class="text-[11px] text-on-surface-variant">Monitor Only</p>
+</div>
+</div>
+</div>
+<div class="lg:col-span-6 p-6 flex flex-col gap-4">
+<div class="relative">
+<span class="block text-[10px] font-bold text-outline uppercase tracking-widest mb-2">Generated Outreach</span>
+<div class="bg-primary/5 border border-primary/10 rounded-xl p-4 text-sm leading-relaxed text-on-surface italic">
+                            "Hi Rahul, just checking in. If you ever need to discuss your account or explore flexible options, we're here."
+                        </div>
+<div class="flex justify-end mt-1">
+<span class="text-[10px] font-medium text-outline">106 / 300 characters</span>
+</div>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-[16px] text-primary">auto_awesome</span>
+<span class="text-[10px] font-bold text-outline uppercase tracking-widest">LLM Justification</span>
+</div>
+<p class="text-xs text-on-surface-variant italic leading-relaxed">
+                            "Overspending pattern but no immediate default risk."
+                        </p>
+</div>
+<div class="flex items-center gap-2 mt-auto">
+<span class="text-[10px] font-bold text-outline uppercase tracking-widest">Tone:</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-[10px] font-bold text-on-surface-variant">Reassuring</span>
+</div>
+</div>
+<div class="lg:col-span-3 p-6 border-l border-outline-variant/10 flex flex-col justify-center gap-3 bg-surface-container-low/20">
+<button class="w-full py-3 px-4 bg-gradient-to-br from-primary to-primary-container text-white rounded-full text-sm font-semibold shadow-sm hover:scale-[1.02] active:scale-95 transition-all">
+                        Approve &amp; Send
+                    </button>
+<button class="w-full py-3 px-4 border border-[#943700] text-[#943700] rounded-full text-sm font-semibold hover:bg-tertiary-fixed/20 transition-colors active:scale-95">
+                        Edit &amp; Send
+                    </button>
+<div class="flex items-center gap-2 mt-2">
+<button class="flex-1 text-error text-sm font-semibold py-2 hover:bg-error/5 rounded-lg transition-colors">
+                            Reject
+                        </button>
+<button class="p-2 hover:bg-surface-container rounded-lg transition-colors">
+<span class="material-symbols-outlined text-outline">expand_more</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Pagination/Footer -->
+<footer class="mt-12 flex items-center justify-between border-t border-outline-variant/10 pt-8">
+<span class="text-xs font-medium text-on-surface-variant">Showing 3 of 12 pending outreaches</span>
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 rounded-full border border-outline-variant/30 flex items-center justify-center text-outline hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">1</button>
+<button class="w-8 h-8 rounded-full text-on-surface-variant flex items-center justify-center text-xs font-bold hover:bg-surface-container">2</button>
+<button class="w-8 h-8 rounded-full text-on-surface-variant flex items-center justify-center text-xs font-bold hover:bg-surface-container">3</button>
+<button class="w-8 h-8 rounded-full border border-outline-variant/30 flex items-center justify-center text-outline hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</footer>
+</main>
+<!-- Success Toast (Hidden) -->
+<div class="fixed bottom-8 right-8 bg-inverse-surface text-inverse-on-surface px-6 py-4 rounded-2xl shadow-xl flex items-center gap-4 border border-white/10 hidden">
+<span class="material-symbols-outlined text-success-container text-green-400">check_circle</span>
+<div class="text-sm">
+<p class="font-bold">Outreach Approved</p>
+<p class="opacity-80">Message sent to CUS-9773 via Voice.</p>
+</div>
+</div>
+</body></html>

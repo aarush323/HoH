@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@theme {
+  --spacing: 0.25rem;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --color-primary: #004ac6;
+  --color-primary-container: #2563eb;
+  --color-primary-fixed: #dbe1ff;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-tertiary: #943700;
+  --color-surface: #f9f9f9;
+  --color-surface-container: #eeeeee;
+  --color-on-surface: #1a1c1c;
+  --color-outline: #737686;
+}
+
+@layer base {
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #f9f9f9;
+    color: #1a1c1c;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ghost-border {
+    border: 1px solid rgba(195, 198, 215, 0.15);
+  }
+
+  .glass {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.4s ease-out forwards;
+  }
+
+  .animate-pulse-dot {
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  .risk-high {
+    color: #ef4444;
+  }
+
+  .risk-medium {
+    color: #f59e0b;
+  }
+
+  .risk-low {
+    color: #10b981;
+  }
+
+  .risk-high-bg {
+    background-color: #fef2f2;
+    color: #991b1b;
+  }
+
+  .risk-medium-bg {
+    background-color: #fffbeb;
+    color: #92400e;
+  }
+
+  .risk-low-bg {
+    background-color: #f0fdf4;
+    color: #166534;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-dot {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c3c6d7;
+  border-radius: 3px;
+}
