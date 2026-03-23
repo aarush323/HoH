@@ -186,3 +186,76 @@ def get_audit_log(customer_id: str = None) -> list[dict]:
                 LIMIT 500
             """)).fetchall()
     return [dict(r._mapping) for r in rows]
+
+def get_weekly_observations_live(customer_id: str) -> list[dict]:
+    """
+    Returns all weekly_features rows for this customer
+    ordered by observation_week ASC.
+    Returns them formatted as kafka_message dicts —
+    same exact format as get_latest_as_kafka_message() returns.
+    """
+    with get_connection() as conn:
+        rows = conn.execute(text("""
+            SELECT
+                c.customer_id, c.age, c.customer_segment, c.geography_zone,
+                c.product_type, c.account_vintage_months, c.emi_to_income_ratio,
+                wf.observation_week,
+                wf.salary_delay_days, wf.salary_drop_pct,
+                wf.avg_daily_balance_inr, wf.balance_trend_pct,
+                wf.net_cashflow_ratio, wf.savings_drawdown_pct,
+                wf.savings_withdrawal_count, wf.utility_payment_delay_days,
+                wf.num_bills_paid_late_last_4w, wf.discretionary_spend_inr,
+                wf.discretionary_vs_4w_avg_pct, wf.gambling_lottery_spend_inr,
+                wf.gambling_4w_change_pct, wf.upi_to_lending_apps_count,
+                wf.upi_to_lending_apps_amount_inr, wf.atm_vs_4w_avg_pct,
+                wf.auto_debit_failures, wf.credit_card_utilization_pct,
+                wf.credit_inquiries_last_30d, wf.paying_minimum_only_flag,
+                wf.mobile_app_logins, wf.financial_stress_queries,
+                wf.customer_service_calls, wf.will_default_next_2_4_weeks,
+                wf.emi_bounced_flag
+            FROM customers c
+            JOIN weekly_features wf ON c.customer_id = wf.customer_id
+            WHERE c.customer_id = :cid
+            ORDER BY wf.observation_week ASC
+        """), {"cid": customer_id}).fetchall()
+
+    result = []
+    for row in rows:
+        result.append({
+            "customer_id":                    row.customer_id,
+            "observation_week":               str(row.observation_week),
+            "event_timestamp":                str(row.observation_week),
+            "source":                         "db_fetch",
+            "age":                            row.age,
+            "customer_segment":               row.customer_segment,
+            "geography_zone":                 row.geography_zone,
+            "product_type":                   row.product_type,
+            "account_vintage_months":         row.account_vintage_months,
+            "emi_to_income_ratio":            float(row.emi_to_income_ratio),
+            "salary_delay_days":              row.salary_delay_days,
+            "salary_drop_pct":                float(row.salary_drop_pct),
+            "avg_daily_balance_inr":          float(row.avg_daily_balance_inr),
+            "balance_trend_pct":              float(row.balance_trend_pct),
+            "net_cashflow_ratio":             float(row.net_cashflow_ratio),
+            "savings_drawdown_pct":           float(row.savings_drawdown_pct),
+            "savings_withdrawal_count":       row.savings_withdrawal_count,
+            "utility_payment_delay_days":     row.utility_payment_delay_days,
+            "num_bills_paid_late_last_4w":    row.num_bills_paid_late_last_4w,
+            "discretionary_spend_inr":        float(row.discretionary_spend_inr),
+            "discretionary_vs_4w_avg_pct":    float(row.discretionary_vs_4w_avg_pct),
+            "gambling_lottery_spend_inr":     float(row.gambling_lottery_spend_inr),
+            "gambling_4w_change_pct":         float(row.gambling_4w_change_pct),
+            "upi_to_lending_apps_count":      row.upi_to_lending_apps_count,
+            "upi_to_lending_apps_amount_inr": float(row.upi_to_lending_apps_amount_inr),
+            "atm_vs_4w_avg_pct":              float(row.atm_vs_4w_avg_pct),
+            "auto_debit_failures":            row.auto_debit_failures,
+            "credit_card_utilization_pct":    float(row.credit_card_utilization_pct),
+            "credit_inquiries_last_30d":      row.credit_inquiries_last_30d,
+            "paying_minimum_only_flag":       bool(row.paying_minimum_only_flag),
+            "mobile_app_logins":              row.mobile_app_logins,
+            "financial_stress_queries":       row.financial_stress_queries,
+            "customer_service_calls":         row.customer_service_calls,
+            "will_default_next_2_4_weeks":    bool(row.will_default_next_2_4_weeks),
+            "emi_bounced_flag":               bool(getattr(row, "emi_bounced_flag", False))
+        })
+    return result

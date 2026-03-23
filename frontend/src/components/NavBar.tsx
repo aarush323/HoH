@@ -7,6 +7,7 @@ const links = [
     { to: '/portfolio', label: 'Portfolio' },
     { to: '/shocks', label: 'Shock Events' },
     { to: '/outreach', label: 'Outreach' },
+    { to: '/journey/C00011', label: 'Journey Replay' },
 ]
 
 export default function NavBar() {

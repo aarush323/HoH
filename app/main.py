@@ -85,55 +85,28 @@ def predict(kafka_message: dict) -> dict:
 
     # ── HARDCODED DEMO DATA FOR SPECIFIC CUSTOMERS ──
     if customer_id == "C00011":
-        shap_factors = [
-            {"feature": "auto_debit_failures",    "value": 3,     "contribution": 0.38, "direction": "increases_risk"},
-            {"feature": "salary_delay_days",      "value": 17,    "contribution": 0.31, "direction": "increases_risk"},
-            {"feature": "avg_daily_balance_inr",  "value": 6800,  "contribution": 0.18, "direction": "increases_risk"},
-            {"feature": "savings_drawdown_pct",   "value": -8.2,  "contribution": 0.08, "direction": "increases_risk"},
-            {"feature": "emi_to_income_ratio",    "value": 0.61,  "contribution": 0.05, "direction": "increases_risk"},
-        ]
         customer_profile.update({
             "tenure_months": 36,
             "relationship_value": "Medium",
             "loan_amount": 850000,
             "loan_type": "Home Loan"
         })
-        risk_score = 0.82
-        risk_level = "High"
 
     elif customer_id == "C00078":
-        shap_factors = [
-            {"feature": "upi_to_lending_apps_count",      "value": 8,    "contribution": 0.35, "direction": "increases_risk"},
-            {"feature": "upi_to_lending_apps_amount_inr", "value": 4200, "contribution": 0.28, "direction": "increases_risk"},
-            {"feature": "salary_delay_days",              "value": 18,   "contribution": 0.19, "direction": "increases_risk"},
-            {"feature": "credit_card_utilization_pct",    "value": 87,   "contribution": 0.12, "direction": "increases_risk"},
-            {"feature": "avg_daily_balance_inr",          "value": 14200,"contribution": 0.06, "direction": "increases_risk"},
-        ]
         customer_profile.update({
             "tenure_months": 36,
             "relationship_value": "Medium",
             "loan_amount": 120000,
             "loan_type": "Personal Loan"
         })
-        risk_score = 0.77
-        risk_level = "High"
 
     elif customer_id == "C00002":
-        shap_factors = [
-            {"feature": "discretionary_spend_inr",        "value": 18400, "contribution": 0.29, "direction": "increases_risk"},
-            {"feature": "credit_inquiries_last_30d",       "value": 4,     "contribution": 0.24, "direction": "increases_risk"},
-            {"feature": "paying_minimum_only_flag",        "value": 1,     "contribution": 0.22, "direction": "increases_risk"},
-            {"feature": "discretionary_vs_4w_avg_pct",    "value": 34.5,  "contribution": 0.15, "direction": "increases_risk"},
-            {"feature": "savings_drawdown_pct",            "value": 9.4,   "contribution": 0.10, "direction": "increases_risk"},
-        ]
         customer_profile.update({
             "tenure_months": 24,
             "relationship_value": "Medium",
             "loan_amount": 60000,
             "loan_type": "Credit Card"
         })
-        risk_score = 0.65
-        risk_level = "Medium"
     # ────────────────────────────────────────────────
 
     return {

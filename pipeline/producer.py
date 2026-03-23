@@ -6,7 +6,7 @@ from kafka import KafkaProducer
 KAFKA_TOPIC = "customer-weekly-observations"
 KAFKA_BROKER = "127.0.0.1:9093"
 CSV_FILE = "pipeline/pre_delinquency_dataset.csv"
-DELAY_SECONDS = 0.05
+DELAY_SECONDS = 2.0
 DEMO_CUSTOMERS = {"C00011", "C00078", "C00002"}
 
 def run_producer(limit_customers=None):
@@ -85,6 +85,7 @@ def run_producer(limit_customers=None):
                 "shock_type":                  row["shock_type"],
             }
             producer.send(KAFKA_TOPIC, value=message)
+            time.sleep(DELAY_SECONDS)
             sent += 1
             if sent % 100 == 0:
                 print(f"[Producer] Sent {sent} messages...")
