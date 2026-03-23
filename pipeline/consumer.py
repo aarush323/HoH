@@ -9,6 +9,7 @@ from db.postgres import get_connection
 from db.cassandra_component import get_session
 from sqlalchemy import text
 import httpx
+import threading
 
 KAFKA_TOPIC = "customer-weekly-observations"
 KAFKA_BROKER = "127.0.0.1:9093"
@@ -274,4 +275,6 @@ for message in consumer:
 
     if should_trigger(record) and customer_id not in triggered:
         triggered.add(customer_id)
-        fire_intervention(record)
+        # Run intervention in a background thread so we don't block the stream
+        thread = threading.Thread(target=fire_intervention, args=(record,), daemon=True)
+        thread.start()

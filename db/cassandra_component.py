@@ -13,7 +13,7 @@ profile = ExecutionProfile(
 
 cluster = Cluster(
     contact_points=["127.0.0.1"],
-    port=9042,
+    port=9043,
     execution_profiles={EXEC_PROFILE_DEFAULT: profile},
     protocol_version=4,
     connect_timeout=30

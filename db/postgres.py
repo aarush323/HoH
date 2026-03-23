@@ -6,10 +6,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = (
-    f"postgresql://{os.getenv('POSTGRES_USER', 'admin')}:"
-    f"{os.getenv('POSTGRES_PASSWORD', 'admin123')}@"
-    f"{os.getenv('POSTGRES_HOST', 'localhost')}:"
-    f"{os.getenv('POSTGRES_PORT', '5432')}/"
+    f"postgresql://admin:admin123@"
+    f"127.0.0.1:"
+    f"5433/"
     f"{os.getenv('POSTGRES_DB', 'pre_delinquency')}"
 )
 
