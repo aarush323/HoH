@@ -5,47 +5,31 @@ from sqlalchemy import text
 from db.postgres import get_connection
 
 
-def _compute_base_score(row) -> tuple[float, str]:
-    """Deterministic score with no noise — for list views and caching."""
-    def val(obj, attr):
-        v = getattr(obj, attr, 0)
-        return float(v) if v is not None else 0.0
-
-    score = min(0.99, (
-        (val(row, "salary_delay_days") / 10)           * 0.25 +
-        (val(row, "auto_debit_failures") / 5)          * 0.30 +
-        (abs(val(row, "savings_drawdown_pct")) / 100)  * 0.25 +
-        (val(row, "utility_payment_delay_days") / 10)  * 0.20
-    ))
-    level = "High" if score >= 0.70 else "Medium" if score >= 0.40 else "Low"
-    return round(score, 4), level
 
 
 def get_all_customers_with_risk() -> list[dict]:
     with get_connection() as conn:
+        # Fetch the latest prediction for each customer
         rows = conn.execute(text("""
             SELECT
                 c.customer_id, c.customer_segment, c.product_type,
-                wf.salary_delay_days, wf.auto_debit_failures,
-                wf.savings_drawdown_pct, wf.utility_payment_delay_days,
-                wf.observation_week
+                mp.ensemble_score, mp.risk_band, mp.observation_week
             FROM customers c
-            JOIN weekly_features wf ON c.customer_id = wf.customer_id
-            WHERE wf.observation_week = (
-                SELECT MAX(w2.observation_week)
-                FROM weekly_features w2
-                WHERE w2.customer_id = c.customer_id
+            JOIN model_predictions mp ON c.customer_id = mp.customer_id
+            WHERE mp.predicted_at = (
+                SELECT MAX(mp2.predicted_at)
+                FROM model_predictions mp2
+                WHERE mp2.customer_id = c.customer_id
             )
         """)).fetchall()
 
     result = []
     for row in rows:
-        score, level = _compute_base_score(row)
         result.append({
             "customer_id":      row.customer_id,
             "name":             f"Customer {row.customer_id}",
-            "risk_score":       score,
-            "risk_level":       level,
+            "risk_score":       float(row.ensemble_score) if row.ensemble_score is not None else 0.0,
+            "risk_level":       row.risk_band or "Low",
             "observation_week": str(row.observation_week),
             "product_type":     row.product_type,
             "customer_segment": row.customer_segment,
@@ -259,3 +243,55 @@ def get_weekly_observations_live(customer_id: str) -> list[dict]:
             "emi_bounced_flag":               bool(getattr(row, "emi_bounced_flag", False))
         })
     return result
+def store_ml_prediction(payload: dict) -> int:
+    """
+    Stores the ML ensemble result and all associated SHAP factors.
+    Returns the new prediction_id.
+    """
+    with get_connection() as conn:
+        with conn.begin():
+            # 1. Insert prediction
+            res = conn.execute(text("""
+                INSERT INTO model_predictions (
+                    customer_id, observation_week, 
+                    lightgbm_score, gru_score, ensemble_score, 
+                    risk_band, model_version
+                ) VALUES (
+                    :cid, :oweek, 
+                    :lgb, :gru, :ensemble, 
+                    :band, :version
+                ) RETURNING id
+            """), {
+                "cid":      payload["customer_id"],
+                "oweek":    payload["observation_week"],
+                "lgb":      payload.get("lightgbm_score"),
+                "gru":      payload.get("gru_score"),
+                "ensemble": payload["risk_score"],
+                "band":     payload["risk_level"],
+                "version":  payload.get("model_version", "ensemble-2.0.0")
+            })
+            prediction_id = res.scalar()
+
+            # 2. Bulk insert SHAP factors
+            shap_factors = payload.get("shap_factors", [])
+            if shap_factors:
+                # We use rank for ordering in the UI later
+                for i, factor in enumerate(shap_factors):
+                    conn.execute(text("""
+                        INSERT INTO shap_explanations (
+                            prediction_id, customer_id, feature_name, 
+                            shap_value, feature_value, rank
+                        ) VALUES (
+                            :pid, :cid, :feature, 
+                            :sval, :fval, :rank
+                        )
+                    """), {
+                        "pid":     prediction_id,
+                        "cid":     payload["customer_id"],
+                        "feature": factor["feature"],
+                        "sval":    factor["contribution"],
+                        "fval":    factor["value"],
+                        "rank":    i + 1
+                    })
+
+            return prediction_id

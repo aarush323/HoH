@@ -117,22 +117,42 @@ async def intervene(customer_id: str, request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent pipeline failed: {str(e)}")
 
-    voice_result = result.get("voice_result") or {}
-    call_memory  = voice_result.get("call_memory") or {}
+    try:
+        print("DEBUG - RESULT:", result)
 
-    return {
-        "customer_id":         customer_id,
-        "risk_score":          result["total_risk_score"],
-        "risk_level":          result["risk_level"],
-        "hard_stop":           result["hard_stop"],
-        "hard_stop_reason":    result["hard_stop_reason"],
-        "intervention_method": result["Intervention_method"],
-        "selected_channel":    result.get("selected_channel"),
-        "message_content":     result["Message_content"],
-        "voice_outcome":       voice_result.get("outcome"),
-        "offer_accepted":      call_memory.get("offer_accepted"),
-        "turns_taken":         voice_result.get("turns_taken"),
-    }
+        voice_result = result.get("voice_result")
+        if not isinstance(voice_result, dict):
+            voice_result = {}
+
+        call_memory = voice_result.get("call_memory")
+        if not isinstance(call_memory, dict):
+            call_memory = {}
+
+        intervention_method = result.get("Intervention_method")
+        message_content = result.get("Message_content")
+
+        # Handle monitor_only specifically for cleaner response
+        if intervention_method == "monitor_only" and not message_content:
+            message_content = "No intervention required. Monitoring only."
+
+        return {
+            "customer_id":         customer_id,
+            "risk_score":          result.get("total_risk_score"),
+            "risk_level":          result.get("risk_level"),
+            "hard_stop":           result.get("hard_stop"),
+            "hard_stop_reason":    result.get("hard_stop_reason"),
+            "intervention_method": intervention_method,
+            "selected_channel":    result.get("selected_channel"),
+            "message_content":     message_content,
+            "voice_outcome":       voice_result.get("outcome"),
+            "offer_accepted":      call_memory.get("offer_accepted"),
+            "turns_taken":         voice_result.get("turns_taken"),
+        }
+    except Exception as e:
+        import traceback
+        print("CRITICAL ERROR IN API RETURN BLOCK:")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"API error: {str(e)}")
 
 
 @app.get("/outreach/{customer_id}")
@@ -326,22 +346,32 @@ async def journey_stream(customer_id: str):
 
                                 try:
                                     result = await run_in_threadpool(graph.invoke, initial_state)
-                                    voice_result = result.get("voice_result") or {}
-                                    call_memory  = voice_result.get("call_memory") or {}
+                                    voice_result = result.get("voice_result")
+                                    if not isinstance(voice_result, dict):
+                                        voice_result = {}
+
+                                    call_memory = voice_result.get("call_memory")
+                                    if not isinstance(call_memory, dict):
+                                        call_memory = {}
+
+                                    intervention_method = result.get("Intervention_method")
+                                    message_content = result.get("Message_content")
+                                    if intervention_method == "monitor_only" and not message_content:
+                                        message_content = "No intervention required. Monitoring only."
 
                                     intervention_event = {
                                         "type":          "intervention",
                                         "week":          week_key,
                                         "week_number":   len(seen_weeks),
-                                        "score":         round(result["total_risk_score"], 4),
-                                        "risk_level":    result["risk_level"],
-                                        "method":        result["Intervention_method"],
+                                        "score":         round(result.get("total_risk_score", 0), 4),
+                                        "risk_level":    result.get("risk_level"),
+                                        "method":        intervention_method,
                                         "channel":       result.get("selected_channel"),
-                                        "message":       result["Message_content"],
+                                        "message":       message_content,
                                         "voice_outcome": voice_result.get("outcome"),
                                         "offer_accepted":call_memory.get("offer_accepted"),
-                                        "hard_stop":     result["hard_stop"],
-                                        "hard_stop_reason": result["hard_stop_reason"],
+                                        "hard_stop":     result.get("hard_stop"),
+                                        "hard_stop_reason": result.get("hard_stop_reason"),
                                     }
                                     yield f"data: {json.dumps(intervention_event, default=str)}\n\n"
                                     yield f"data: {json.dumps({'type': 'complete', 'triggered': True})}\n\n"
@@ -387,22 +417,32 @@ async def journey_stream(customer_id: str):
 
                             try:
                                 result = await run_in_threadpool(graph.invoke, initial_state)
-                                voice_result = result.get("voice_result") or {}
-                                call_memory  = voice_result.get("call_memory") or {}
+                                voice_result = result.get("voice_result")
+                                if not isinstance(voice_result, dict):
+                                    voice_result = {}
+
+                                call_memory = voice_result.get("call_memory")
+                                if not isinstance(call_memory, dict):
+                                    call_memory = {}
+
+                                intervention_method = result.get("Intervention_method")
+                                message_content = result.get("Message_content")
+                                if intervention_method == "monitor_only" and not message_content:
+                                    message_content = "No intervention required. Monitoring only."
 
                                 intervention_event = {
                                     "type":          "intervention",
                                     "week":          len(seen_weeks),
                                     "week_number":   len(seen_weeks),
-                                    "score":         round(result["total_risk_score"], 4),
-                                    "risk_level":    result["risk_level"],
-                                    "method":        result["Intervention_method"],
+                                    "score":         round(result.get("total_risk_score", 0), 4),
+                                    "risk_level":    result.get("risk_level"),
+                                    "method":        intervention_method,
                                     "channel":       result.get("selected_channel"),
-                                    "message":       result["Message_content"],
+                                    "message":       message_content,
                                     "voice_outcome": voice_result.get("outcome"),
                                     "offer_accepted":call_memory.get("offer_accepted"),
-                                    "hard_stop":     result["hard_stop"],
-                                    "hard_stop_reason": result["hard_stop_reason"],
+                                    "hard_stop":     result.get("hard_stop"),
+                                    "hard_stop_reason": result.get("hard_stop_reason"),
                                 }
                                 yield f"data: {json.dumps(intervention_event, default=str)}\n\n"
                                 yield f"data: {json.dumps({'type': 'complete', 'triggered': True})}\n\n"

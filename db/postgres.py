@@ -32,7 +32,8 @@ if __name__ == "__main__":
 
 
 def create_tables_if_not_exist():
-    with get_connection() as conn:
+    with engine.begin() as conn:
+        # 1. Base Staging
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS raw_observations_staging (
                 customer_id                     VARCHAR(20),
@@ -68,23 +69,49 @@ def create_tables_if_not_exist():
                 customer_service_calls          INT,
                 will_default_next_2_4_weeks     BOOLEAN,
                 monthly_income_inr              NUMERIC(14,2),
-                emi_amount_inr                  NUMERIC(12,2),
+                emi_amount_inr                  NUMERIC(14,2),
                 emi_due_this_week               BOOLEAN,
                 available_funds_inr             NUMERIC(14,2),
                 emi_paid_flag                   BOOLEAN,
                 emi_bounced_flag                BOOLEAN,
                 missed_emi_count_rolling        INT,
-                balance_velocity                NUMERIC(12,4),
+                balance_velocity                NUMERIC(14,2),
                 salary_delay_delta              NUMERIC(8,4),
-                discretionary_velocity          NUMERIC(12,4),
-                upi_lending_delta               NUMERIC(12,4),
+                discretionary_velocity          NUMERIC(14,2),
+                upi_lending_delta               NUMERIC(8,4),
                 savings_drawdown_velocity       NUMERIC(8,4),
                 external_shock_flag             BOOLEAN,
-                shock_type                      VARCHAR(64),
+                shock_type                      VARCHAR(50),
                 ingested_at                     TIMESTAMPTZ DEFAULT NOW(),
                 PRIMARY KEY (customer_id, observation_week)
             )
         """))
+
+        # 2. Core Entities
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS customers (
+                customer_id                 VARCHAR(20) PRIMARY KEY,
+                name                        VARCHAR(100),
+                age                         INT,
+                customer_segment            VARCHAR(50),
+                geography_zone              VARCHAR(50),
+                product_type                VARCHAR(50),
+                account_vintage_months      INT,
+                tenure_months               FLOAT,
+                emi_to_income_ratio         NUMERIC(6,4),
+                loan_amount                 NUMERIC(14,2),
+                relationship_value          VARCHAR(20),
+                fraud_flag                  BOOLEAN DEFAULT FALSE,
+                existing_restructuring      BOOLEAN DEFAULT FALSE,
+                previous_payment_holiday    BOOLEAN DEFAULT FALSE,
+                legal_npa_flag              BOOLEAN DEFAULT FALSE,
+                kyc_lapsed                  BOOLEAN DEFAULT FALSE,
+                created_at                  TIMESTAMPTZ DEFAULT NOW(),
+                updated_at                  TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+
+        # 3. Features & Predictions
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS weekly_features (
                 id                              BIGSERIAL PRIMARY KEY,
@@ -115,55 +142,111 @@ def create_tables_if_not_exist():
                 customer_service_calls          INT,
                 will_default_next_2_4_weeks     BOOLEAN,
                 monthly_income_inr              NUMERIC(14,2),
-                emi_amount_inr                  NUMERIC(12,2),
+                emi_amount_inr                  NUMERIC(14,2),
                 emi_due_this_week               BOOLEAN,
                 available_funds_inr             NUMERIC(14,2),
                 emi_paid_flag                   BOOLEAN,
                 emi_bounced_flag                BOOLEAN,
                 missed_emi_count_rolling        INT,
-                balance_velocity                NUMERIC(12,4),
+                balance_velocity                NUMERIC(14,2),
                 salary_delay_delta              NUMERIC(8,4),
-                discretionary_velocity          NUMERIC(12,4),
-                upi_lending_delta               NUMERIC(12,4),
+                discretionary_velocity          NUMERIC(14,2),
+                upi_lending_delta               NUMERIC(8,4),
                 savings_drawdown_velocity       NUMERIC(8,4),
                 external_shock_flag             BOOLEAN,
-                shock_type                      VARCHAR(64),
+                shock_type                      VARCHAR(50),
                 synced_at                       TIMESTAMPTZ DEFAULT NOW(),
                 UNIQUE (customer_id, observation_week)
             )
         """))
+
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_weekly_features_customer_week ON weekly_features (customer_id, observation_week)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS model_predictions (
+                id                  BIGSERIAL PRIMARY KEY,
+                customer_id         VARCHAR(20) REFERENCES customers(customer_id),
+                observation_week    DATE,
+                lightgbm_score      NUMERIC(6,4),
+                gru_score           NUMERIC(6,4),
+                ensemble_score      NUMERIC(6,4),
+                risk_band           VARCHAR(20),
+                model_version       VARCHAR(30),
+                predicted_at        TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_predictions_customer ON model_predictions (customer_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS shap_explanations (
+                id              BIGSERIAL PRIMARY KEY,
+                prediction_id   BIGINT REFERENCES model_predictions(id),
+                customer_id     VARCHAR(20),
+                feature_name    VARCHAR(100),
+                shap_value      NUMERIC(10,6),
+                feature_value   NUMERIC(14,4),
+                rank            INT
+            )
+        """))
+
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_shap_customer ON shap_explanations (customer_id)"))
+
+        # 4. Context & Interventions
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS stress_context (
+                id              BIGSERIAL PRIMARY KEY,
+                customer_id     VARCHAR(20) REFERENCES customers(customer_id),
+                prediction_id   BIGINT REFERENCES model_predictions(id),
+                narrative       TEXT,
+                stress_type     VARCHAR(50),
+                severity        VARCHAR(20),
+                created_at      TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS interventions (
-                id                   SERIAL PRIMARY KEY,
-                customer_id          VARCHAR(50) NOT NULL,
-                observation_week     DATE,
-                risk_score           FLOAT,
-                risk_level           VARCHAR(20),
-                hard_stop            BOOLEAN DEFAULT FALSE,
-                hard_stop_reason     TEXT,
-                selected_channel     VARCHAR(50),
-                intervention_method  TEXT,
-                message_content      TEXT,
-                full_result_json     JSONB,
-                created_at           TIMESTAMPTZ DEFAULT NOW()
+                id                          BIGSERIAL PRIMARY KEY,
+                customer_id                 VARCHAR(20) REFERENCES customers(customer_id),
+                prediction_id               BIGINT REFERENCES model_predictions(id),
+                observation_week            DATE,
+                stress_context_id           BIGINT REFERENCES stress_context(id),
+                intervention_method         VARCHAR(50),
+                intervention_justification  TEXT,
+                eligible_interventions      TEXT[],
+                selected_channel            VARCHAR(20),
+                message_tone                VARCHAR(30),
+                message_content             TEXT,
+                channel_dispatch_result     JSONB,
+                hard_stop                   BOOLEAN DEFAULT FALSE,
+                hard_stop_reason            TEXT,
+                status                      VARCHAR(20),
+                outcome                     VARCHAR(20),
+                created_at                  TIMESTAMPTZ DEFAULT NOW(),
+                resolved_at                 TIMESTAMPTZ,
+                UNIQUE (customer_id, observation_week)
             )
         """))
+
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_interventions_customer ON interventions (customer_id)"))
+
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS voice_sessions (
-                id                   SERIAL PRIMARY KEY,
-                customer_id          VARCHAR(50) NOT NULL,
-                intervention_id      INT REFERENCES interventions(id),
-                voice_outcome        VARCHAR(50),
-                voice_turns          INT,
-                offer_accepted       BOOLEAN,
-                intent_history       JSONB,
-                sentiment_trajectory JSONB,
-                topics_raised        JSONB,
-                escalate             BOOLEAN DEFAULT FALSE,
-                escalate_reason      TEXT,
-                created_at           TIMESTAMPTZ DEFAULT NOW()
+                id                      BIGSERIAL PRIMARY KEY,
+                intervention_id         BIGINT REFERENCES interventions(id),
+                customer_id             VARCHAR(20) REFERENCES customers(customer_id),
+                escalate                BOOLEAN,
+                escalate_reason         TEXT,
+                outcome                 VARCHAR(50),
+                turns_taken             INT,
+                language_detected       VARCHAR(20),
+                call_memory             JSONB,
+                call_duration_seconds   INT,
+                created_at              TIMESTAMPTZ DEFAULT NOW()
             )
         """))
+
         
         alter_statements = [
             "ALTER TABLE raw_observations_staging ADD COLUMN IF NOT EXISTS monthly_income_inr NUMERIC(14,2);",
@@ -199,5 +282,3 @@ def create_tables_if_not_exist():
         
         for stmt in alter_statements:
             conn.execute(text(stmt))
-            
-        conn.commit()

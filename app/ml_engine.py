@@ -291,9 +291,8 @@ def score_from_kafka(record: dict) -> tuple:
     return round(float(risk_score), 4), merged_shap
 
 def get_risk_level(score: float) -> str:
-    # _ensemble_thr is loaded from ensemble_threshold.pkl
-    # default fallback is 0.5833 if for some reason it's not loaded
-    thr = _ensemble_thr if _ensemble_thr is not None else 0.5833
+    # Use 0.40 as the base threshold for voice intervention as requested
+    thr = 0.40
     
     if score >= thr:
         if score >= 0.75: return "High"

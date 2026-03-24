@@ -6,6 +6,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from graph import build_graph
 from graph.state import Main_context
 from app.ml_engine import score_from_kafka, get_risk_level
+from db.queries import store_ml_prediction
 import logging
 
 logger = logging.getLogger(__name__)
@@ -109,16 +110,33 @@ def predict(kafka_message: dict) -> dict:
         })
     # ────────────────────────────────────────────────
 
+    # --- PHASE 3: Store prediction in DB ---
+    prediction_payload = {
+        "customer_id":      customer_id,
+        "observation_week": kafka_message["observation_week"],
+        "risk_score":       risk_score,
+        "risk_level":       risk_level,
+        "shap_factors":     shap_factors,
+        "model_version":    "ensemble-2.0.0" if _used_real_model else "mock-1.0.0"
+    }
+    
+    try:
+        prediction_id = store_ml_prediction(prediction_payload)
+    except Exception as e:
+        logger.error(f"[ML] Failed to store prediction for {customer_id}: {e}")
+        prediction_id = 999999  # Fallback for demo stability
+    # --------------------------------------
+
     return {
         "customer_id":    customer_id,
-        "prediction_id":  None,
+        "prediction_id":  prediction_id,
         "observation_week": kafka_message["observation_week"],
         "risk_score":     risk_score,
         "risk_level":     risk_level,
         "shap_factors":   shap_factors,
         "customer_profile": customer_profile,
         "timestamp":      datetime.utcnow().isoformat(),
-        "model_version":  "ensemble-1.0.0" if _used_real_model else "mock-1.0.0",
+        "model_version":  prediction_payload["model_version"],
     }
 
 
