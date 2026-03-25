@@ -201,6 +201,7 @@ def create_tables_if_not_exist():
                 narrative       TEXT,
                 stress_type     VARCHAR(50),
                 severity        VARCHAR(20),
+                recommended_action TEXT,
                 created_at      TIMESTAMPTZ DEFAULT NOW()
             )
         """))

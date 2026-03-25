@@ -36,12 +36,14 @@ def analyst_node(state: Main_context):
     Given data: risk_score: {risk_score}, risk_level: {risk_level}
     shap_details: {shap_text}
     from the above details , make a short concise narrative , identify the type of stress and the severity.
+    ALSO, suggest a single tactical 'recommended_action' for the RM/Collections team (max 15 words).
 
     Give Stress analysis. return JSON ONLY:
         {{
             "narrative" : "str",
             "stress_type": "income_shock | overspending | structural | debt | unknown",
-            "severity" : "very high | high | medium | low"
+            "severity" : "very high | high | medium | low",
+            "recommended_action": "str"
         }}
     """
 
@@ -54,6 +56,7 @@ def analyst_node(state: Main_context):
             "narrative": parse.get("narrative", ""),
             "stress_type": parse.get("stress_type", ""),
             "severity": parse.get("severity", ""),
+            "recommended_action": parse.get("recommended_action", "Monitor and review next week.")
         }
     }
 
@@ -443,15 +446,16 @@ def persist_to_db_node(state: Main_context) -> dict:
 
                 # Step 2: Insert into stress_context
                 result = conn.execute(text("""
-                    INSERT INTO stress_context (customer_id, prediction_id, narrative, stress_type, severity)
-                    VALUES (:cid, :pid, :narrative, :type, :severity)
+                    INSERT INTO stress_context (customer_id, prediction_id, narrative, stress_type, severity, recommended_action)
+                    VALUES (:cid, :pid, :narrative, :type, :severity, :action)
                     RETURNING id
                 """), {
                     "cid": customer_id,
                     "pid": prediction_id,
                     "narrative": stress.get("narrative"),
                     "type": stress.get("stress_type"),
-                    "severity": stress.get("severity")
+                    "severity": stress.get("severity"),
+                    "action": stress.get("recommended_action")
                 })
                 stress_context_id = result.scalar()
 

@@ -145,6 +145,7 @@ export interface CustomerDetailOverview {
         narrative: string;
         stress_type: string;
         severity: string;
+        recommended_action?: string;
     } | null;
     audit: AuditRecord[];
 }

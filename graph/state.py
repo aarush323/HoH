@@ -30,6 +30,7 @@ class stress_context(TypedDict):
     narrative: str
     stress_type: str
     severity: str
+    recommended_action: Optional[str]
 
 
 class voice_result(TypedDict):
