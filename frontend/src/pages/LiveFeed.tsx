@@ -29,9 +29,9 @@ export default function LiveFeed() {
             await api.triggerProducer()
         } catch (err) {
             console.error('Failed to start stream:', err)
-        } finally {
-            setIsSimulating(false)
         }
+        // Keep button disabled for 30 seconds to prevent duplicate clicks
+        setTimeout(() => setIsSimulating(false), 30000)
     }
 
     return (
