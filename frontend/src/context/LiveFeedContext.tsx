@@ -28,10 +28,10 @@ export const LiveFeedProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         es.onopen = () => setConnected(true);
         es.onmessage = (e) => {
             try {
-                const data: CustomerSummary[] = JSON.parse(e.data);
-                if (Array.isArray(data)) {
-                    setCustomers(data);
-                    setEventCount((c) => c + 1);
+                const payload = JSON.parse(e.data);
+                if (payload.customers && Array.isArray(payload.customers)) {
+                    setCustomers(payload.customers);
+                    setEventCount(payload.total_events || 0);
                     setLastUpdate(new Date());
                 }
             } catch (err) {

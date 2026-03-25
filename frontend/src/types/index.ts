@@ -8,6 +8,18 @@ export interface CustomerSummary {
     observation_week: string;
     product_type: string;
     customer_segment: string;
+    pipeline_status?: {
+        ingested: boolean;
+        scored: boolean;
+        analysed: boolean;
+        outreach: boolean;
+    };
+    signals: {
+        salary_delay: number;
+        auto_debit_failures: number;
+        savings_drawdown: number;
+        utility_delay: number;
+    }
 }
 
 export interface ShapFactor {
@@ -20,6 +32,8 @@ export interface ShapFactor {
 export interface ScoreResponse {
     customer_id: string;
     risk_score: number;
+    lgb_p?: number;
+    gru_p?: number;
     risk_level: string;
     shap_factors: ShapFactor[];
     observation_week: string;
@@ -60,6 +74,7 @@ export interface WeeklyFeature {
 
 export interface CustomerProfile {
     customer_id: string;
+    name?: string;
     age?: number;
     customer_segment?: string;
     geography_zone?: string;
@@ -121,4 +136,15 @@ export interface Rules {
     thresholds: Record<string, number>;
     score_weights: Record<string, number>;
     risk_levels: Record<string, number>;
+}
+
+export interface CustomerDetailOverview {
+    profile: CustomerFullProfile;
+    score: ScoreResponse;
+    stress: {
+        narrative: string;
+        stress_type: string;
+        severity: string;
+    } | null;
+    audit: AuditRecord[];
 }

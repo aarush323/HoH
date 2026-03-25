@@ -32,6 +32,12 @@ export const api = {
     intervene: (id: string) => post<InterveneResponse>(`/intervene/${id}`),
     getAudit: (id?: string) =>
         get<AuditRecord[]>(id ? `/audit/${id}` : '/audit'),
+    getCustomerDetail: (id: string) => get<{
+        profile: CustomerFullProfile;
+        score: ScoreResponse;
+        stress: { narrative: string; stress_type: string; severity: string } | null;
+        audit: AuditRecord[];
+    }>(`/customer/${id}/detail`),
     getRules: () => get<Rules>('/rules'),
     getHealth: () => get<{ status: string; model: string }>('/health'),
     triggerProducer: () => post<{ status: string; messages_sent: number }>('/trigger-producer'),

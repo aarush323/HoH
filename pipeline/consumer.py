@@ -57,7 +57,6 @@ def fire_intervention(record: dict):
         print(f"[Trigger] {record['customer_id']} → HTTP {response.status_code}")
     except Exception as e:
         print(f"[Trigger] Failed for {record['customer_id']}: {e}")
-        # Never raise — consumer must not crash because API is slow or down
 
 
 def insert_into_postgres(record: dict):
@@ -267,11 +266,12 @@ for message in consumer:
           f"auto_debit_failures={record['auto_debit_failures']} | "
           f"default_risk={record['will_default_next_2_4_weeks']}")
 
-    insert_into_db(record)
+    # Unified High-Performance Ingestion
+    try:
+        httpx.post(f"{API_BASE}/ingest", json=record, timeout=60.0)
+    except Exception as e:
+        print(f"[Consumer Error] Ingest call failed for {customer_id}: {e}")
 
+    # fresh data arrived, bust cache
     from db.redis_client import invalidate_customer
-    invalidate_customer(customer_id)  # fresh data arrived, bust cache
-
-    if should_trigger(record) and customer_id not in triggered:
-        triggered.add(customer_id)
-        fire_intervention(record)
+    invalidate_customer(customer_id)

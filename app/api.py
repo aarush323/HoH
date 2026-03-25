@@ -16,6 +16,8 @@ from db.queries import (
     get_intervention_history,
     get_audit_log,
     get_weekly_observations_live,
+    get_total_events,
+    get_customer_detail_overview
 )
 from db.postgres import create_tables_if_not_exist
 from db.redis_client import get_cached_risk_score, cache_risk_score
@@ -64,6 +66,8 @@ def get_score(customer_id: str):
     ml = predict(kafka_message)
     score_data = {
         "risk_score":       ml["risk_score"],
+        "lgb_p":            ml.get("lgb_p", ml["risk_score"]),
+        "gru_p":            ml.get("gru_p", ml["risk_score"]),
         "risk_level":       ml["risk_level"],
         "shap_factors":     ml["shap_factors"],
         "observation_week": ml["observation_week"],
@@ -185,6 +189,13 @@ RULES = {
     "risk_levels": {"High": 0.70, "Medium": 0.40},
 }
 
+@app.get("/customer/{customer_id}/detail")
+def get_customer_detail(customer_id: str):
+    data = get_customer_detail_overview(customer_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return data
+
 @app.get("/rules")
 def get_rules():
     return RULES
@@ -194,12 +205,56 @@ async def update_rules(request: Request):
     return {"status": "noted", "note": "Rule updates apply when ML model is connected"}
 
 
-@app.post("/trigger-producer")
-def trigger_producer():
-    """Manual trigger to stream demo customers into Kafka."""
-    count = run_producer()
-    return {"status": "success", "messages_sent": count}
+from fastapi import BackgroundTasks
 
+@app.post("/trigger-producer")
+async def trigger_producer(background_tasks: BackgroundTasks):
+    """Manual trigger to stream demo customers into Kafka."""
+    background_tasks.add_task(run_producer)
+    return {"status": "success", "note": "Producer started in background"}
+
+@app.post("/ingest")
+async def ingest_record(request: Request):
+    """Unified ingestion endpoint for high-performance stream processing."""
+    try:
+        record = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    customer_id = record.get("customer_id")
+
+    # 1. Persist observation to database
+    try:
+        from pipeline.consumer import insert_into_db
+        from fastapi.concurrency import run_in_threadpool
+        await run_in_threadpool(insert_into_db, record)
+    except Exception as e:
+        print(f"[Ingest Error] DB persist failed: {e}")
+
+    # 2. Run inference (updates model_predictions)
+    try:
+        prediction_result = predict(record)
+    except Exception as e:
+        print(f"[Ingest Error] Predict failed: {e}")
+        prediction_result = {"risk_score": 0.0, "risk_level": "Low"}
+
+    # 3. Check if we should fire intervention
+    from pipeline.consumer import should_trigger
+    triggered = should_trigger(record)
+    if triggered:
+        async def run_intervention():
+            try:
+                await intervene(customer_id, request)
+            except:
+                pass
+        asyncio.create_task(run_intervention())
+
+    return {
+        "status": "processed",
+        "customer_id": customer_id,
+        "risk_score": prediction_result.get("risk_score"),
+        "intervention_triggered": triggered
+    }
 
 @app.get("/audit")
 def get_all_audit():
@@ -220,14 +275,28 @@ async def stream_risk():
             try:
                 # Use run_in_threadpool to offload blocking DB query
                 customers = await run_in_threadpool(get_all_customers_with_risk)
-                # print(f"[SSE] Sending {len(customers)} customers") # Debugging log
-                yield f"data: {json.dumps(customers, default=str)}\n\n"
+                total_events = await run_in_threadpool(get_total_events)
+                
+                payload = {
+                    "customers": customers,
+                    "total_events": total_events
+                }
+                
+                print(f"[SSE] Sending {len(customers)} customers, {total_events} total events")
+                yield f"data: {json.dumps(payload, default=str)}\n\n"
             except Exception as e:
                 print(f"[SSE Error] {e}")
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
             await asyncio.sleep(2)
             
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @app.get("/health")

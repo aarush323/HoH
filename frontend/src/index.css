@@ -1,84 +1,63 @@
 @import "tailwindcss";
 
 @theme {
-  --spacing: 0.25rem;
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --color-primary: #004ac6;
-  --color-primary-container: #2563eb;
-  --color-primary-fixed: #dbe1ff;
-  --color-error: #ba1a1a;
-  --color-error-container: #ffdad6;
-  --color-tertiary: #943700;
-  --color-surface: #f9f9f9;
-  --color-surface-container: #eeeeee;
-  --color-on-surface: #1a1c1c;
-  --color-outline: #737686;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 @layer base {
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background-color: #f9f9f9;
-    color: #1a1c1c;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    @apply bg-zinc-50 font-sans text-zinc-900 antialiased selection:bg-indigo-100;
   }
 }
 
-@layer utilities {
-  .tabular {
-    font-variant-numeric: tabular-nums;
-  }
-
+@layer components {
   .ghost-border {
-    border: 1px solid rgba(195, 198, 215, 0.15);
+    @apply border border-zinc-200/50 hover:border-zinc-300 transition-colors;
   }
 
-  .glass {
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-  }
-
-  .animate-fade-in-up {
-    animation: fadeInUp 0.4s ease-out forwards;
-  }
-
-  .animate-pulse-dot {
-    animation: pulse-dot 2s ease-in-out infinite;
-  }
-
-  .risk-high {
-    color: #ef4444;
-  }
-
-  .risk-medium {
-    color: #f59e0b;
-  }
-
-  .risk-low {
-    color: #10b981;
-  }
-
-  .risk-high-bg {
-    background-color: #fef2f2;
-    color: #991b1b;
-  }
-
-  .risk-medium-bg {
-    background-color: #fffbeb;
-    color: #92400e;
-  }
-
-  .risk-low-bg {
-    background-color: #f0fdf4;
-    color: #166534;
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-xl border border-white/20 shadow-xl shadow-zinc-200/50;
   }
 }
 
-@keyframes fadeInUp {
+/* Animations for that premium feel in Live Feed and Landing */
+@keyframes ticker {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-ticker {
+  animation: ticker 30s linear infinite;
+}
+
+@keyframes node-pulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.1;
+  }
+
+  50% {
+    transform: scale(1.5);
+    opacity: 0.3;
+  }
+}
+
+.animate-node-pulse {
+  animation: node-pulse 3s ease-in-out infinite;
+}
+
+@keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(20px);
   }
 
   to {
@@ -87,28 +66,23 @@
   }
 }
 
-@keyframes pulse-dot {
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes gradient-x {
 
   0%,
   100% {
-    opacity: 1;
+    background-position: 0% 50%;
   }
 
   50% {
-    opacity: 0.4;
+    background-position: 100% 50%;
   }
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #c3c6d7;
-  border-radius: 3px;
+.animate-gradient-x {
+  animation: gradient-x 15s ease infinite;
+  background-size: 400% 400%;
 }

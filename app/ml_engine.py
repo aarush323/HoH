@@ -288,7 +288,12 @@ def score_from_kafka(record: dict) -> tuple:
     
     print("="*50 + "\n")
     
-    return round(float(risk_score), 4), merged_shap
+    return {
+        "risk_score": round(float(risk_score), 4),
+        "lgb_p": round(float(lgb_p_f), 4),
+        "gru_p": round(float(gru_p_f), 4), 
+        "shap_factors": merged_shap
+    }
 
 def get_risk_level(score: float) -> str:
     # Use 0.40 as the base threshold for voice intervention as requested

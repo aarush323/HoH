@@ -2,221 +2,194 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { CustomerSummary, AuditRecord } from '../types'
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
-
-function KpiCard({ label, value, badge, badgeColor, valueColor, accent }: {
-    label: string; value: string; badge?: string; badgeColor?: string; valueColor?: string; accent?: string
-}) {
-    return (
-        <div className={`bg-white p-6 rounded-2xl ghost-border shadow-sm hover:shadow-md transition-all ${accent || ''}`}>
-            <div className="flex justify-between items-start mb-4">
-                <span className="text-[11px] uppercase tracking-wider font-bold text-[#737686]">{label}</span>
-                {badge && (
-                    <span className={`text-xs font-bold flex items-center gap-1 px-2 py-0.5 rounded-full ${badgeColor}`}>
-                        {badge}
-                    </span>
-                )}
-            </div>
-            <div className={`text-[2.5rem] font-black tracking-tighter tabular leading-none ${valueColor || ''}`}>
-                {value}
-            </div>
-        </div>
-    )
-}
-
-const RISK_COLORS = { High: '#ef4444', Medium: '#f59e0b', Low: '#10b981' }
+import {
+    Zap,
+    ShieldAlert,
+    ChevronRight,
+    ArrowUpRight,
+    Play,
+    Activity,
+    Users,
+    MessageSquare,
+    PieChart as PieIcon
+} from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 
 export default function Dashboard() {
+    const navigate = useNavigate()
     const [customers, setCustomers] = useState<CustomerSummary[]>([])
     const [audit, setAudit] = useState<AuditRecord[]>([])
     const [loading, setLoading] = useState(true)
-    const navigate = useNavigate()
 
     useEffect(() => {
         Promise.all([api.getCustomers(), api.getAudit()])
-            .then(([c, a]) => { setCustomers(c); setAudit(a) })
+            .then(([c, a]) => {
+                setCustomers(c);
+                setAudit(a);
+            })
             .catch(console.error)
             .finally(() => setLoading(false))
     }, [])
 
-    if (loading) return <div className="flex items-center justify-center min-h-[60vh] text-zinc-400 text-sm">Loading dashboard...</div>
+    if (loading) return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="w-12 h-12 border-4 border-zinc-100 border-t-indigo-600 rounded-full animate-spin" />
+        </div>
+    )
 
-    const counts = { High: 0, Medium: 0, Low: 0 }
-    customers.forEach((c) => { if (c.risk_level in counts) counts[c.risk_level as keyof typeof counts]++ })
+    const highRisk = customers.filter(c => c.risk_level === 'High').length
+    const totalExposure = customers.length * 450000 // Average loan size
+    const interventionSuccess = audit.filter(a => a.status === 'Resolved').length
 
-    const pieData = Object.entries(counts).map(([name, value]) => ({ name, value }))
-    const total = customers.length
-    const highPct = total ? ((counts.High / total) * 100).toFixed(1) : '0'
-
-    // Channel counts from audit
-    const channels: Record<string, number> = {}
-    const methods: Record<string, number> = {}
-    let accepted = 0
-    audit.forEach((a) => {
-        if (a.selected_channel) channels[a.selected_channel] = (channels[a.selected_channel] || 0) + 1
-        if (a.intervention_method) methods[a.intervention_method] = (methods[a.intervention_method] || 0) + 1
-        if (a.voice_outcome === 'accepted' || a.outcome === 'accepted') accepted++
-    })
-    const successRate = audit.length ? ((accepted / audit.length) * 100).toFixed(1) : '—'
+    const pieData = [
+        { name: 'High', value: highRisk, color: '#ef4444' },
+        { name: 'Medium', value: customers.filter(c => c.risk_level === 'Medium').length, color: '#6366f1' },
+        { name: 'Low', value: customers.filter(c => c.risk_level === 'Low').length, color: '#10b981' }
+    ]
 
     return (
-        <div className="animate-fade-in-up">
-            {/* Header */}
-            <div className="mb-10 flex justify-between items-end">
-                <div>
-                    <span className="text-[10px] uppercase tracking-widest font-bold text-[#737686] mb-1 block">
-                        Institutional Grade
-                    </span>
-                    <h1 className="text-[1.75rem] font-bold tracking-tight text-zinc-900 leading-none">
-                        Executive Dashboard
+        <div className="animate-fade-in pb-32 max-w-[1400px] mx-auto px-10 font-sans text-zinc-900 leading-tight">
+
+            {/* 1. Executive Top Header */}
+            <div className="pt-20 mb-20 flex flex-col md:flex-row justify-between items-end gap-10">
+                <div className="space-y-4">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-zinc-900 text-white rounded-lg text-[9px] font-black uppercase tracking-[.3em] shadow-xl shadow-indigo-100/50">
+                        <Zap fill="white" size={10} /> v2.4 Topology Active
+                    </div>
+                    <h1 className="text-7xl font-black tracking-tighter text-zinc-950 leading-[.85]">
+                        BIRD'S EYE <br />
+                        <span className="text-zinc-300">SUMMARY.</span>
                     </h1>
                 </div>
+
+                <div className="flex gap-4">
+                    <button
+                        onClick={() => navigate('/portfolio')}
+                        className="h-14 px-8 bg-zinc-950 text-white rounded-2xl text-[10px] font-bold tracking-[.15em] uppercase hover:bg-indigo-600 transition-all active:scale-95 shadow-xl shadow-zinc-200"
+                    >
+                        Full Portfolio
+                    </button>
+                </div>
             </div>
 
-            {/* KPI Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <KpiCard label="Total Customers" value={total.toLocaleString()} badge={`↑ ${highPct}% high`} badgeColor="bg-blue-50 text-[#004ac6]" />
-                <KpiCard label="High Risk Count" value={counts.High.toLocaleString()} badge="⚠" badgeColor="bg-red-50 text-red-600" valueColor="text-red-500" accent="border-l-4 border-red-500" />
-                <KpiCard label="Interventions" value={audit.length.toLocaleString()} badge="Active" badgeColor="bg-orange-50 text-orange-600" valueColor="text-orange-600" />
-                <KpiCard label="Success Rate" value={`${successRate}%`} badge="✓ Stable" badgeColor="bg-emerald-50 text-emerald-600" valueColor="text-emerald-600" />
+            {/* 2. Primary KPI Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-20">
+                {[
+                    { label: "Portfolio Stress", value: `${Math.round((highRisk / customers.length) * 100 || 0)}%`, desc: "Aggregate Risk Factor", icon: <ShieldAlert size={16} className="text-red-500" />, accent: "bg-red-50 text-red-900 border-red-100" },
+                    { label: "Total Asset Value", value: `$${(totalExposure / 1000000).toFixed(1)}M`, desc: "Intervension Thresholds Active", icon: <Users size={16} className="text-zinc-400" />, accent: "bg-zinc-50 border-zinc-100" },
+                    { label: "Agent Success", value: `${interventionSuccess}`, desc: "Resolved Autonomous Cases", icon: <Activity size={16} className="text-emerald-500" />, accent: "bg-emerald-50 text-emerald-900 border-emerald-100" },
+                    { label: "Live Signals", value: `${customers.length}`, desc: "Concurrent Ingestion Pulses", icon: <PieIcon size={16} className="text-indigo-400" />, accent: "bg-indigo-50 text-indigo-900 border-indigo-100" }
+                ].map((kpi, i) => (
+                    <div key={i} className={`p-10 rounded-[2.5rem] border transition-all ${kpi.accent} shadow-sm group hover:-translate-y-1 hover:shadow-xl`}>
+                        <div className="flex justify-between items-start mb-10">
+                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                                {kpi.icon}
+                            </div>
+                            <ArrowUpRight size={14} className="text-zinc-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                        <div className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-2">{kpi.label}</div>
+                        <div className="text-5xl font-black tracking-tighter mb-4">{kpi.value}</div>
+                        <div className="text-[10px] font-bold uppercase tracking-widest opacity-40">{kpi.desc}</div>
+                    </div>
+                ))}
             </div>
 
-            {/* Charts row */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-                {/* Risk Distribution */}
-                <div className="lg:col-span-4 bg-white p-6 rounded-2xl ghost-border shadow-sm">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-[#737686] mb-6">Risk Distribution</h3>
-                    <div className="flex items-center gap-6">
-                        <ResponsiveContainer width={120} height={120}>
+            {/* 3. Deep Analysis Section (Pie + Watchlist) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+
+                {/* Visual Distribution */}
+                <div className="lg:col-span-5 bg-white rounded-[3rem] p-12 border border-zinc-100 shadow-sm relative overflow-hidden group hover:shadow-2xl transition-all">
+                    <div className="relative z-10 space-y-2 mb-12">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Risk Segmentation</div>
+                        <h3 className="text-3xl font-black tracking-tight uppercase leading-none">Portfolio Heatmap</h3>
+                    </div>
+
+                    <div className="h-[300px] w-full relative">
+                        <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                                <Pie data={pieData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} dataKey="value" stroke="none">
-                                    {pieData.map((d) => (
-                                        <Cell key={d.name} fill={RISK_COLORS[d.name as keyof typeof RISK_COLORS]} />
+                                <Pie
+                                    data={pieData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={80}
+                                    outerRadius={120}
+                                    paddingAngle={8}
+                                    dataKey="value"
+                                    stroke="none"
+                                >
+                                    {pieData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                 </Pie>
+                                <Tooltip />
                             </PieChart>
                         </ResponsiveContainer>
-                        <div className="flex flex-col gap-3">
-                            {pieData.map((d) => (
-                                <div key={d.name} className="flex items-center justify-between gap-6">
-                                    <div className="flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: RISK_COLORS[d.name as keyof typeof RISK_COLORS] }} />
-                                        <span className="text-sm font-medium">{d.name}</span>
-                                    </div>
-                                    <span className="text-sm font-bold tabular">{d.value.toLocaleString()}</span>
-                                </div>
-                            ))}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <div className="text-4xl font-black tracking-tight">{customers.length}</div>
+                            <div className="text-[9px] font-black uppercase text-zinc-300 tracking-[.4em]">ACCOUNTS</div>
                         </div>
                     </div>
-                </div>
 
-                {/* Channel Distribution */}
-                <div className="lg:col-span-4 bg-white p-6 rounded-2xl ghost-border shadow-sm">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-[#737686] mb-6">Channel Distribution</h3>
-                    <div className="space-y-3">
-                        {Object.entries(channels).map(([ch, cnt]) => (
-                            <div key={ch} className="flex items-center justify-between">
-                                <span className="text-sm font-medium capitalize">{ch.replace('_', ' ')}</span>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-32 h-2 bg-zinc-100 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-[#004ac6] rounded-full"
-                                            style={{ width: `${(cnt / Math.max(...Object.values(channels))) * 100}%` }}
-                                        />
-                                    </div>
-                                    <span className="text-sm font-bold tabular w-8 text-right">{cnt}</span>
-                                </div>
+                    {/* Legend */}
+                    <div className="mt-12 flex justify-between gap-4 border-t border-zinc-50 pt-10">
+                        {pieData.map((d, i) => (
+                            <div key={i} className="flex flex-col gap-1">
+                                <span className={`text-[10px] font-black uppercase tracking-widest`} style={{ color: d.color }}>{d.name}</span>
+                                <span className="text-lg font-black tracking-tight">{d.value}</span>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                {/* Intervention Funnel */}
-                <div className="lg:col-span-4 bg-white p-6 rounded-2xl ghost-border shadow-sm">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-[#737686] mb-6">Intervention Funnel</h3>
+                {/* Critical Stress Watchlist */}
+                <div className="lg:col-span-7 bg-zinc-950 rounded-[3rem] p-12 border border-zinc-900 shadow-2xl relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-12 opacity-10 group-hover:scale-150 transition-transform duration-1000">
+                        <ShieldAlert size={120} className="text-red-500" />
+                    </div>
+
+                    <div className="relative z-10 space-y-2 mb-12 flex justify-between items-end">
+                        <div>
+                            <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500">ML Criticals</div>
+                            <h3 className="text-3xl font-black tracking-tight uppercase leading-none text-white">Active Stress Watchlist</h3>
+                        </div>
+                        <button
+                            onClick={() => navigate('/live')}
+                            className="flex items-center gap-2 group/btn text-zinc-500 hover:text-white transition-colors"
+                        >
+                            <span className="text-[9px] font-black uppercase tracking-widest">Live Stream</span>
+                            <Play size={12} fill="currentColor" />
+                        </button>
+                    </div>
+
                     <div className="space-y-4">
-                        {[
-                            { label: 'Flagged', value: counts.High + counts.Medium, pct: 100 },
-                            { label: 'Triggered', value: audit.length, pct: total ? (audit.length / (counts.High + counts.Medium)) * 100 : 0 },
-                            { label: 'Dispatched', value: audit.filter((a) => a.status === 'dispatched').length, pct: audit.length ? (audit.filter((a) => a.status === 'dispatched').length / audit.length) * 100 : 0 },
-                            { label: 'Accepted', value: accepted, pct: audit.length ? (accepted / audit.length) * 100 : 0 },
-                        ].map((s) => (
-                            <div key={s.label}>
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-sm font-semibold">{s.label}</span>
-                                    <span className="text-sm font-bold tabular">{s.value}</span>
+                        {customers.filter(c => c.risk_level === 'High').slice(0, 4).map((c, i) => (
+                            <div
+                                key={i}
+                                onClick={() => navigate(`/customer/${c.customer_id}`)}
+                                className="group/item flex items-center justify-between p-6 bg-zinc-900/50 rounded-2xl border border-zinc-800/50 hover:bg-red-500/10 hover:border-red-500/30 transition-all cursor-pointer"
+                            >
+                                <div className="flex items-center gap-6">
+                                    <div className="text-zinc-700 font-black italic group-hover/item:text-red-500 transition-colors">#{i + 1}</div>
+                                    <div>
+                                        <div className="text-[10px] font-black uppercase text-zinc-500 tracking-[.2em]">{c.customer_id}</div>
+                                        <div className="text-base font-black text-white tracking-tight">{c.product_type}</div>
+                                    </div>
                                 </div>
-                                <div className="h-3 w-full bg-zinc-100 rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full rounded-full ${s.label === 'Accepted' ? 'bg-emerald-500' : 'bg-[#2563eb]'}`}
-                                        style={{ width: `${Math.min(100, s.pct)}%` }}
-                                    />
+
+                                <div className="flex items-center gap-10">
+                                    <div className="text-right">
+                                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">ML Score</div>
+                                        <div className="text-xl font-black text-red-500 tabular">{Math.round(c.risk_score * 100)}%</div>
+                                    </div>
+                                    <ChevronRight size={16} className="text-zinc-700 group-hover/item:text-white transition-colors group-hover/item:translate-x-1" />
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
+
             </div>
 
-            {/* Recent Activity Table */}
-            <section className="bg-white rounded-2xl ghost-border shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-zinc-100 flex justify-between items-center">
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-900">Recent Activity Feed</h3>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-zinc-50 text-[10px] uppercase tracking-widest font-bold text-[#737686]">
-                                <th className="px-6 py-3">Customer ID</th>
-                                <th className="px-6 py-3">Risk Tier</th>
-                                <th className="px-6 py-3">Intervention</th>
-                                <th className="px-6 py-3">Channel</th>
-                                <th className="px-6 py-3">Status</th>
-                                <th className="px-6 py-3 text-right">Time</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-50">
-                            {audit.slice(0, 10).map((a) => {
-                                const cust = customers.find((c) => c.customer_id === a.customer_id)
-                                const rl = cust?.risk_level || 'Medium'
-                                return (
-                                    <tr
-                                        key={a.id}
-                                        className="hover:bg-zinc-50 transition-colors cursor-pointer"
-                                        onClick={() => navigate(`/customer/${a.customer_id}`)}
-                                    >
-                                        <td className="px-6 py-4 text-sm font-bold tabular">{a.customer_id}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${rl === 'High' ? 'bg-red-50 text-red-700' : rl === 'Medium' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
-                                                }`}>{rl}</span>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm font-medium capitalize">{a.intervention_method?.replace(/_/g, ' ') || '—'}</td>
-                                        <td className="px-6 py-4 text-sm text-zinc-500 capitalize">{a.selected_channel?.replace(/_/g, ' ') || '—'}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={`flex items-center gap-1.5 text-xs font-semibold ${a.voice_outcome === 'accepted' || a.outcome === 'accepted' ? 'text-emerald-600' :
-                                                    a.status === 'dispatched' ? 'text-blue-600' :
-                                                        a.hard_stop ? 'text-red-600' : 'text-amber-600'
-                                                }`}>
-                                                <span className={`w-1.5 h-1.5 rounded-full ${a.voice_outcome === 'accepted' || a.outcome === 'accepted' ? 'bg-emerald-600' :
-                                                        a.status === 'dispatched' ? 'bg-blue-600' :
-                                                            a.hard_stop ? 'bg-red-600' : 'bg-amber-600'
-                                                    }`} />
-                                                {a.voice_outcome || a.outcome || a.status || '—'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm tabular text-zinc-400 text-right">
-                                            {a.created_at ? new Date(a.created_at).toLocaleTimeString() : '—'}
-                                        </td>
-                                    </tr>
-                                )
-                            })}
-                            {audit.length === 0 && (
-                                <tr><td colSpan={6} className="px-6 py-12 text-center text-zinc-400 text-sm">No intervention records yet. Start the Kafka pipeline to see data.</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
         </div>
     )
 }

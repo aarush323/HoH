@@ -7,15 +7,23 @@ from db.postgres import get_connection
 
 
 
+def get_total_events() -> int:
+    with get_connection() as conn:
+        return conn.execute(text("SELECT COUNT(*) FROM weekly_features")).scalar() or 0
+
 def get_all_customers_with_risk() -> list[dict]:
     with get_connection() as conn:
-        # Fetch the latest prediction for each customer
+        # Fetch the latest prediction and associated signals for each customer
         rows = conn.execute(text("""
             SELECT
                 c.customer_id, c.customer_segment, c.product_type,
-                mp.ensemble_score, mp.risk_band, mp.observation_week
+                mp.ensemble_score, mp.risk_band, mp.observation_week,
+                wf.salary_delay_days, wf.auto_debit_failures, wf.savings_drawdown_pct, wf.utility_payment_delay_days,
+                (SELECT COUNT(*) FROM stress_context sc WHERE sc.prediction_id = mp.id) > 0 as has_analysis,
+                (SELECT COUNT(*) FROM interventions i WHERE i.prediction_id = mp.id) > 0 as has_outreach
             FROM customers c
             JOIN model_predictions mp ON c.customer_id = mp.customer_id
+            JOIN weekly_features wf ON c.customer_id = wf.customer_id AND mp.observation_week = wf.observation_week
             WHERE mp.predicted_at = (
                 SELECT MAX(mp2.predicted_at)
                 FROM model_predictions mp2
@@ -25,14 +33,27 @@ def get_all_customers_with_risk() -> list[dict]:
 
     result = []
     for row in rows:
+        r = row._mapping
         result.append({
-            "customer_id":      row.customer_id,
-            "name":             f"Customer {row.customer_id}",
-            "risk_score":       float(row.ensemble_score) if row.ensemble_score is not None else 0.0,
-            "risk_level":       row.risk_band or "Low",
-            "observation_week": str(row.observation_week),
-            "product_type":     row.product_type,
-            "customer_segment": row.customer_segment,
+            "customer_id":      r["customer_id"],
+            "name":             f"Customer {r['customer_id']}",
+            "risk_score":       float(r["ensemble_score"]) if r["ensemble_score"] is not None else 0.0,
+            "risk_level":       r["risk_band"] or "Low",
+            "observation_week": str(r["observation_week"]),
+            "product_type":     r["product_type"],
+            "customer_segment": r["customer_segment"],
+            "pipeline_status": {
+                "ingested": True,
+                "scored":   True,
+                "analysed": bool(r["has_analysis"]),
+                "outreach": bool(r["has_outreach"])
+            },
+            "signals": {
+                "salary_delay":      int(r["salary_delay_days"] or 0),
+                "auto_debit_failures": int(r["auto_debit_failures"] or 0),
+                "savings_drawdown":   float(r["savings_drawdown_pct"] or 0.0),
+                "utility_delay":      int(r["utility_payment_delay_days"] or 0)
+            }
         })
 
     return sorted(result, key=lambda x: x["risk_score"], reverse=True)
@@ -138,6 +159,63 @@ def get_intervention_history(customer_id: str) -> list[dict]:
             ORDER BY created_at DESC
         """), {"cid": customer_id}).fetchall()
     return [dict(r._mapping) for r in rows]
+
+def get_score_details(customer_id: str) -> dict | None:
+    with get_connection() as conn:
+        prediction = conn.execute(text("""
+            SELECT * FROM model_predictions
+            WHERE customer_id = :cid
+            ORDER BY predicted_at DESC
+            LIMIT 1
+        """), {"cid": customer_id}).fetchone()
+
+        if not prediction:
+            return None
+
+        shap = conn.execute(text("""
+            SELECT feature_name AS feature, shap_value AS contribution, feature_value AS value
+            FROM shap_explanations
+            WHERE prediction_id = :pid
+            ORDER BY ABS(shap_value) DESC
+        """), {"pid": prediction.id}).fetchall()
+
+        return {
+            "customer_id":      prediction.customer_id,
+            "risk_score":       float(prediction.ensemble_score),
+            "lgb_p":            float(prediction.lightgbm_score) if prediction.lightgbm_score else None,
+            "gru_p":            float(prediction.gru_score) if prediction.gru_score else None,
+            "risk_level":       prediction.risk_band,
+            "shap_factors":     [dict(r._mapping) for r in shap],
+            "observation_week": str(prediction.observation_week),
+            "model_version":    prediction.model_version
+        }
+
+def get_stress_analysis(customer_id: str) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute(text("""
+            SELECT * FROM stress_context
+            WHERE customer_id = :cid
+            ORDER BY created_at DESC
+            LIMIT 1
+        """), {"cid": customer_id}).fetchone()
+    
+    return dict(row._mapping) if row else None
+
+def get_customer_detail_overview(customer_id: str) -> dict | None:
+    profile = get_customer_full_profile(customer_id)
+    if not profile:
+        return None
+    
+    score = get_score_details(customer_id)
+    stress = get_stress_analysis(customer_id)
+    audit = get_audit_log(customer_id)
+    
+    return {
+        "profile": profile,
+        "score": score,
+        "stress": stress,
+        "audit": audit
+    }
 
 
 def get_audit_log(customer_id: str = None) -> list[dict]:

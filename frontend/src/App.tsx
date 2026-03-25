@@ -1,7 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import NavBar from './components/NavBar'
 import Dashboard from './pages/Dashboard'
-import LiveFeed from './pages/LiveFeed'
+import IngestionStream from './pages/IngestionStream'
 import CustomerJourney from './pages/CustomerJourney'
 import PortfolioInsights from './pages/PortfolioInsights'
 import ShockEvents from './pages/ShockEvents'
@@ -19,11 +19,12 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/live" element={<LiveFeed />} />
+            <Route path="/live" element={<IngestionStream />} />
             <Route path="/customer/:id" element={<CustomerJourney />} />
             <Route path="/portfolio" element={<PortfolioInsights />} />
             <Route path="/shocks" element={<ShockEvents />} />
             <Route path="/outreach" element={<Outreach />} />
+            <Route path="/outreach-journey/:id" element={<CustomerJourney />} />
             <Route path="/journey/:id" element={<Journey />} />
           </Routes>
         </LiveFeedProvider>

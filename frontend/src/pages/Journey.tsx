@@ -1,393 +1,184 @@
-import { useEffect, useState, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { api } from '../api/client';
-import { LineChart, Line, XAxis, YAxis, ReferenceLine, ResponsiveContainer, CartesianGrid, Tooltip } from 'recharts';
-
-type CustomerInfo = {
-    customer_id: string;
-    product_type: string;
-    age: number;
-};
-
-type WeekLog = {
-    week: number;
-    score: number;
-    risk_level: string;
-    top_factor: string;
-    top_factor_direction: string;
-    top_factor_value: number;
-    signals: Record<string, number>;
-};
-
-type InterventionLog = {
-    method: string;
-    channel: string;
-    message: string;
-    voice_outcome?: string;
-    offer_accepted?: boolean;
-    hard_stop: boolean;
-    hard_stop_reason?: string;
-};
-
-type LogEntry =
-    | { type: 'week'; data: WeekLog }
-    | { type: 'intervention'; data: InterventionLog; week: number }
-    | { type: 'complete'; triggered: boolean }
-    | { type: 'error'; message: string };
-
-type ChartData = { week: number; score: number; risk_level: string };
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+    ChevronLeft,
+    ShieldAlert,
+    BrainCircuit,
+    Cpu,
+    Microscope,
+    UserCheck,
+    MessageSquare
+} from 'lucide-react';
+import {
+    AreaChart,
+    Area,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer
+} from 'recharts';
 
 export default function Journey() {
-    const { id } = useParams<{ id: string }>();
+    const { id } = useParams();
     const navigate = useNavigate();
-    const [customer, setCustomer] = useState<CustomerInfo | null>(null);
+    const [week, setWeek] = useState(1);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [showAgents, setShowAgents] = useState(false);
 
-    const [status, setStatus] = useState<'idle' | 'playing' | 'intervening' | 'complete'>('idle');
-    const [chartData, setChartData] = useState<ChartData[]>([]);
-    const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+    // Simulated scoring battle (LGB, GRU, Ensemble)
+    const data = [
+        { week: 1, lgb: 0.12, gru: 0.15, ensemble: 0.13 },
+        { week: 2, lgb: 0.14, gru: 0.18, ensemble: 0.16 },
+        { week: 3, lgb: 0.22, gru: 0.25, ensemble: 0.23 },
+        { week: 4, lgb: 0.25, gru: 0.35, ensemble: 0.30 },
+        { week: 5, lgb: 0.35, gru: 0.32, ensemble: 0.34 },
+        { week: 6, lgb: 0.45, gru: 0.55, ensemble: 0.50 },
+        { week: 7, lgb: 0.55, gru: 0.65, ensemble: 0.60 },
+        { week: 8, lgb: 0.62, gru: 0.58, ensemble: 0.60 },
+        { week: 9, lgb: 0.70, gru: 0.85, ensemble: 0.78 },
+        { week: 10, lgb: 0.82, gru: 0.88, ensemble: 0.85 },
+        { week: 11, lgb: 0.92, gru: 0.95, ensemble: 0.94 },
+        { week: 12, lgb: 0.98, gru: 0.99, ensemble: 0.99 }
+    ];
 
-    const [currentWeek, setCurrentWeek] = useState(0);
-    const [totalWeeks, setTotalWeeks] = useState(12);
-
-    const [keyDriver, setKeyDriver] = useState<any>(null);
-    const [signals, setSignals] = useState<any>({});
-
-    const [interventionResult, setInterventionResult] = useState<InterventionLog | null>(null);
-    const [completionResult, setCompletionResult] = useState<{ triggered: boolean } | null>(null);
-
-    const eventSourceRef = useRef<EventSource | null>(null);
-    const logsEndRef = useRef<HTMLDivElement>(null);
-    const chartContainerRef = useRef<HTMLDivElement>(null);
-
-    // Auto-scroll logs
     useEffect(() => {
-        logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [logEntries]);
-
-    // Load customer initial info
-    useEffect(() => {
-        if (!id) return;
-        api.getCustomer(id)
-            .then((res) => {
-                setCustomer({
-                    customer_id: id as string,
-                    product_type: res.customer.product_type,
-                    age: res.customer.age || 0,
-                });
-                setTotalWeeks(res.weekly_history.length || 12);
-            })
-            .catch((err) => {
-                setLogEntries([{ type: 'error', message: 'Failed to load customer profile' }]);
-            });
-
-        return () => {
-            if (eventSourceRef.current) {
-                eventSourceRef.current.close();
-            }
-        };
-    }, [id]);
-
-    const startReplay = () => {
-        if (!id) return;
-
-        // Reset state
-        setStatus('playing');
-        setChartData([]);
-        setLogEntries([]);
-        setCurrentWeek(0);
-        setKeyDriver(null);
-        setSignals({});
-        setInterventionResult(null);
-        setCompletionResult(null);
-
-        if (eventSourceRef.current) {
-            eventSourceRef.current.close();
+        let timer: any;
+        if (isPlaying && week < 12) {
+            timer = setTimeout(() => setWeek(w => w + 1), 800);
+        } else if (week === 12) {
+            setIsPlaying(false);
+            setTimeout(() => setShowAgents(true), 1000);
         }
+        return () => clearTimeout(timer);
+    }, [isPlaying, week]);
 
-        const es = new EventSource(`/api/journey-stream/${id}`);
-
-        es.onmessage = (e) => {
-            const data = JSON.parse(e.data);
-            if (data.type === 'ping') return;
-
-            if (data.type === 'week') {
-                const pd = data as WeekLog;
-                setChartData((prev) => [...prev, { week: pd.week, score: pd.score, risk_level: pd.risk_level }]);
-                setCurrentWeek(pd.week);
-                setKeyDriver({
-                    name: data.top_factor?.replace(/_/g, ' ') || 'None',
-                    value: data.top_factor_value,
-                    direction: data.top_factor_direction,
-                    contrib: data.shap_factors[0]?.contribution || 0
-                });
-                setSignals(data.signals);
-                setLogEntries((prev) => [...prev, { type: 'week', data: pd }]);
-
-                if (data.threshold_crossed) {
-                    chartContainerRef.current?.classList.add('animate-flash-red');
-                    setTimeout(() => chartContainerRef.current?.classList.remove('animate-flash-red'), 1000);
-                }
-            }
-            else if (data.type === 'intervention') {
-                setStatus('intervening');
-                const intv = data as InterventionLog & { week: number };
-                setInterventionResult(intv);
-                setLogEntries((prev) => [...prev, { type: 'intervention', data: intv, week: intv.week }]);
-            }
-            else if (data.type === 'complete') {
-                setStatus('complete');
-                setCompletionResult({ triggered: data.triggered });
-                setLogEntries((prev) => [...prev, { type: 'complete', triggered: data.triggered }]);
-                es.close();
-            }
-            else if (data.type === 'error') {
-                setStatus('idle');
-                setLogEntries((prev) => [...prev, { type: 'error', message: data.message }]);
-                es.close();
-            }
-        };
-
-        es.onerror = () => {
-            setStatus('idle');
-            setLogEntries((prev) => [...prev, { type: 'error', message: 'Stream disconnected' }]);
-            es.close();
-        };
-
-        eventSourceRef.current = es;
-    };
-
-    const getRiskColor = (score: number) => {
-        if (score >= 0.70) return '#ef4444';
-        if (score >= 0.40) return '#eab308';
-        return '#22c55e';
-    };
-
-    const getRiskClass = (level: string) => {
-        if (level === 'High') return 'text-red-400';
-        if (level === 'Medium') return 'text-yellow-400';
-        return 'text-green-400';
-    };
-
-    const latestScore = chartData.length > 0 ? chartData[chartData.length - 1].score : 0;
-    const latestColor = getRiskColor(latestScore);
+    const currentData = data.slice(0, week);
 
     return (
-        <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 flex flex-col font-sans">
-            <style>{`
-        @keyframes flash-red {
-          0% { background-color: rgba(239, 68, 68, 0.2); }
-          100% { background-color: transparent; }
-        }
-        .animate-flash-red {
-          animation: flash-red 1s ease-out;
-        }
-      `}</style>
-
-            {/* --- TOP BAR --- */}
-            <div className="h-16 border-b border-zinc-800 flex items-center justify-between px-6 shrink-0 bg-[#0a0a0a] z-10 w-full sticky top-0">
-                <div className="flex items-center gap-4">
-                    <select
-                        value={id}
-                        onChange={(e) => navigate(`/journey/${e.target.value}`)}
-                        disabled={status === 'playing' || status === 'intervening'}
-                        className="bg-transparent border border-zinc-700 text-xl font-mono font-bold tracking-tight px-2 py-1 rounded text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-500 hover:bg-zinc-800 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed appearance-none"
-                    >
-                        <option value="C00011" className="bg-zinc-900 text-base">C00011</option>
-                        <option value="C00078" className="bg-zinc-900 text-base">C00078</option>
-                        <option value="C00002" className="bg-zinc-900 text-base">C00002</option>
-                    </select>
-                    {customer && (
-                        <>
-                            <span className="px-2 py-1 bg-zinc-800 text-xs font-bold rounded uppercase tracking-widest text-zinc-300">{customer.product_type}</span>
-                            <span className="text-sm font-medium text-zinc-500">{customer.age} years old</span>
-                        </>
-                    )}
-                </div>
-
-                <div className="hidden md:flex flex-col items-center">
-                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Progress</span>
-                    <span className="font-mono text-sm font-bold">WEEK {currentWeek} / {totalWeeks}</span>
-                </div>
-
-                <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full ${status === 'idle' ? 'bg-zinc-600' :
-                            status === 'playing' ? 'bg-green-500 animate-pulse' :
-                                status === 'intervening' ? 'bg-red-500 animate-pulse' :
-                                    'bg-green-500'
-                            }`} />
-                        <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">{status}</span>
-                    </div>
-                    <button
-                        disabled={status === 'playing' || status === 'intervening'}
-                        onClick={startReplay}
-                        className="bg-zinc-100 text-zinc-900 px-5 py-2 rounded-full text-xs font-bold uppercase tracking-widest hover:bg-white active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                        {status === 'complete' || (status === 'idle' && chartData.length > 0) ? (
-                            <>↺ Replay</>
-                        ) : (
-                            <>▶ Play Journey</>
-                        )}
-                    </button>
+        <div className="min-h-screen bg-zinc-950 text-white p-12 animate-fade-in-up font-sans selection:bg-indigo-500/30">
+            {/* Cinematic Header */}
+            <div className="flex items-center gap-10 mb-20 max-w-7xl mx-auto">
+                <button
+                    onClick={() => navigate('/live')}
+                    className="w-14 h-14 rounded-2xl bg-zinc-900 flex items-center justify-center hover:bg-zinc-800 transition-all border border-zinc-800 active:scale-90"
+                >
+                    <ChevronLeft size={24} />
+                </button>
+                <div className="space-y-1">
+                    <h1 className="text-4xl font-black tracking-tighter uppercase whitespace-nowrap leading-none">Cinema Replay</h1>
+                    <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-[.25em]">Customer ID: {id}</p>
                 </div>
             </div>
 
-            {/* --- MAIN SPLIT --- */}
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-                {/* LEFT PANEL */}
-                <div className="w-full lg:w-[60%] border-r border-zinc-800 flex flex-col p-8 overflow-y-auto" ref={chartContainerRef}>
-                    <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-500 mb-6">Risk Score Timeline</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 max-w-7xl mx-auto items-start">
 
-                    <div className="h-[320px] w-full mb-12">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                                <XAxis
-                                    dataKey="week"
-                                    stroke="#71717a"
-                                    fontSize={12}
-                                    tickLine={false}
-                                    axisLine={false}
-                                    padding={{ left: 20, right: 20 }}
-                                />
-                                <YAxis
-                                    domain={[0, 1]}
-                                    ticks={[0, 0.2, 0.4, 0.6, 0.8, 1.0]}
-                                    stroke="#71717a"
-                                    fontSize={12}
-                                    tickLine={false}
-                                    axisLine={false}
-                                />
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
-                                    itemStyle={{ color: '#e4e4e7' }}
-                                />
-                                <ReferenceLine y={0.70} stroke="#ef4444" strokeDasharray="4 4" label={{ position: 'right', value: 'Intervention Threshold', fill: '#ef4444', fontSize: 10, fontWeight: 'bold' }} />
-
-                                <Line
-                                    type="monotone"
-                                    dataKey="score"
-                                    stroke={latestColor}
-                                    strokeWidth={3}
-                                    dot={{ r: 4, strokeWidth: 2 }}
-                                    activeDot={{ r: 6 }}
-                                    isAnimationActive={true}
-                                />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-6">This Week's Key Driver</h3>
-                        {keyDriver ? (
-                            <div className="flex items-center justify-between mb-8">
-                                <div>
-                                    <div className="text-xl font-bold capitalize text-zinc-100">{keyDriver.name}</div>
-                                    <div className="text-sm text-zinc-500 font-mono mt-1">Value: {keyDriver.value}</div>
-                                </div>
-                                <div className="flex flex-col items-end gap-2">
-                                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest ${keyDriver.direction === 'increases_risk' || keyDriver.direction === '+' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'
-                                        }`}>
-                                        {keyDriver.direction === 'increases_risk' || keyDriver.direction === '+' ? '↑ Increases Risk' : '↓ Decreases Risk'}
-                                    </span>
-                                    <span className="text-sm font-bold text-zinc-400">Contrib: +{keyDriver.contrib.toFixed(3)}</span>
-                                </div>
+                {/* Stage 1: The Model Battle Theater */}
+                <div className="lg:col-span-8 space-y-10">
+                    <div className="bg-zinc-900/50 rounded-[2.5rem] border border-zinc-800/50 p-12 relative overflow-hidden group shadow-2xl">
+                        <div className="flex justify-between items-center mb-12">
+                            <div className="flex items-center gap-4">
+                                <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 italic">Ensemble Live Battle Inference</span>
                             </div>
-                        ) : (
-                            <div className="text-sm text-zinc-600 mb-8 italic">Awaiting data...</div>
-                        )}
+                            <button
+                                onClick={() => { setWeek(1); setIsPlaying(true); setShowAgents(false); }}
+                                className="px-6 py-2 bg-white text-zinc-950 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all active:scale-95"
+                            >
+                                Replay History
+                            </button>
+                        </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {[
-                                { label: 'Salary Delay', val: signals.salary_delay_days ?? '—', stress: (signals.salary_delay_days || 0) > 0 },
-                                { label: 'Auto Debit Fails', val: signals.auto_debit_failures ?? '—', stress: (signals.auto_debit_failures || 0) > 0 },
-                                { label: 'Avg Balance', val: signals.avg_daily_balance_inr ? `₹${signals.avg_daily_balance_inr}` : '—', stress: false },
-                                { label: 'EMI Bounced', val: signals.emi_bounced_flag ? 'Yes' : (signals.emi_bounced_flag === 0 ? 'No' : '—'), stress: !!signals.emi_bounced_flag },
-                            ].map((s, i) => (
-                                <div key={i} className={`p-4 rounded-xl border ${s.stress ? 'bg-red-500/10 border-red-500/30' : 'bg-zinc-950 border-zinc-800'}`}>
-                                    <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">{s.label}</div>
-                                    <div className={`text-lg font-bold ${s.stress ? 'text-red-400' : 'text-zinc-300'}`}>{s.val}</div>
-                                </div>
-                            ))}
+                        <div className="h-[400px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={currentData}>
+                                    <defs>
+                                        <linearGradient id="colorEnsemble" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1} />
+                                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <XAxis dataKey="week" hide />
+                                    <YAxis domain={[0, 1]} hide />
+                                    <Tooltip
+                                        content={({ active, payload }) => {
+                                            if (active && payload && payload.length) {
+                                                return (
+                                                    <div className="bg-zinc-950 text-white p-4 rounded-xl text-[10px] font-bold uppercase tracking-widest border border-zinc-800 shadow-2xl">
+                                                        Risk: {(Number(payload[0].value) * 100).toFixed(1)}%
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        }}
+                                    />
+                                    <Area
+                                        type="monotone"
+                                        dataKey="ensemble"
+                                        stroke="#fff"
+                                        strokeWidth={4}
+                                        fillOpacity={1}
+                                        fill="url(#colorEnsemble)"
+                                    />
+                                    <Area type="monotone" dataKey="lgb" stroke="#3b82f6" strokeWidth={1} strokeDasharray="5 5" fill="transparent" />
+                                    <Area type="monotone" dataKey="gru" stroke="#a855f7" strokeWidth={1} strokeDasharray="5 5" fill="transparent" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Chart Legend */}
+                        <div className="mt-8 flex gap-10 border-t border-zinc-800/50 pt-8">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-1 bg-white rounded-full" />
+                                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Ensemble Master</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-1 bg-blue-500 rounded-full opacity-50" />
+                                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">LightGBM (Tree)</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-1 bg-purple-500 rounded-full opacity-50" />
+                                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">GRU (Neural)</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* RIGHT PANEL */}
-                <div className="w-full lg:w-[40%] bg-[#111] flex flex-col p-6 overflow-hidden">
-                    <div className="flex justify-between items-end mb-4 shrink-0">
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-400">Live Processing Log</h2>
-                        <span className="text-[10px] text-zinc-600 font-mono">{logEntries.length} events</span>
+                {/* Stage 2: The Agent Chain Reaction */}
+                <div className="lg:col-span-4 space-y-8">
+                    <div className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-600 mb-4">Autonomous Chain Response</div>
+
+                    <div className="space-y-6">
+                        {[
+                            { id: 1, name: "Data Analyst", icon: <Microscope size={18} />, color: "text-amber-500", desc: "Detected structural salary misalignment vs history." },
+                            { id: 2, name: "Compliance Bot", icon: <BrainCircuit size={18} />, color: "text-indigo-500", desc: "Verified legal moratorium eligibility for zone A." },
+                            { id: 3, name: "Voice Strategist", icon: <MessageSquare size={18} />, color: "text-emerald-500", desc: "Selected empathic channel via ResonareAI API." }
+                        ].map((agent, i) => (
+                            <div
+                                key={agent.id}
+                                className={`p-8 bg-zinc-900 rounded-[2rem] border border-zinc-800 transition-all duration-700 delay-[${i * 300}ms] ${showAgents ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-12'}`}
+                            >
+                                <div className="flex items-center gap-4 mb-4">
+                                    <div className={`w-10 h-10 bg-zinc-950 rounded-xl flex items-center justify-center ${agent.color}`}>
+                                        {agent.icon}
+                                    </div>
+                                    <div className="text-[10px] font-black uppercase tracking-[0.2em]">{agent.name}</div>
+                                </div>
+                                <p className="text-[11px] font-bold text-zinc-500 tracking-tight leading-relaxed">{agent.desc}</p>
+                            </div>
+                        ))}
                     </div>
 
-                    <div className="flex-1 overflow-y-auto font-mono text-sm space-y-2 pr-2" style={{ scrollbarWidth: 'thin', scrollbarColor: '#3f3f46 transparent' }}>
-                        {logEntries.length === 0 && (
-                            <div className="text-zinc-600 italic mt-4 text-xs">Press Play to replay this customer's journey</div>
-                        )}
-                        {logEntries.map((log, idx) => {
-                            if (log.type === 'week') {
-                                const icon = log.data.risk_level === 'High' ? '⚠' : log.data.risk_level === 'Medium' ? '⚡' : '✓';
-                                const colorClass = getRiskClass(log.data.risk_level);
-                                const formattedWeek = log.data.week.toString().padStart(2, '0');
-                                const formattedScore = log.data.score.toFixed(2);
-                                const factorStr = log.data.top_factor ? `${log.data.top_factor}=${log.data.top_factor_value}` : 'No signals';
-                                return (
-                                    <div key={idx} className={`${colorClass} opacity-90`}>
-                                        W{formattedWeek} │ {formattedScore} │ {icon} │ {factorStr}
-                                    </div>
-                                );
-                            }
-                            if (log.type === 'intervention') {
-                                return (
-                                    <div key={idx} className="my-6 border border-red-500/50 bg-red-500/10 rounded p-4 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
-                                        <div className="font-bold mb-2">🚨 INTERVENTION TRIGGERED — WEEK {log.week}</div>
-                                        <div className="h-px w-full bg-red-500/30 mb-2" />
-                                        <div className="space-y-1">
-                                            <div className="flex"><span className="w-24 text-red-500/80">Method:</span> <span className="capitalize">{log.data.method.replace(/_/g, ' ')}</span></div>
-                                            <div className="flex"><span className="w-24 text-red-500/80">Channel:</span> <span className="capitalize">{log.data.channel?.replace(/_/g, ' ') || 'None'}</span></div>
-                                            <div className="flex"><span className="w-24 text-red-500/80">Message:</span> <span className="line-clamp-2">"{log.data.message}"</span></div>
-                                            <div className="flex"><span className="w-24 text-red-500/80">Outcome:</span> <span className="capitalize">{log.data.voice_outcome || 'N/A'}</span></div>
-                                            {log.data.hard_stop && (
-                                                <div className="flex"><span className="w-24 text-red-500/80">Hard Stop:</span> <span className="font-bold">{log.data.hard_stop_reason}</span></div>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            }
-                            if (log.type === 'complete') {
-                                return (
-                                    <div key={idx} className="text-green-400 mt-4 font-bold border-l-2 border-green-500 pl-3">
-                                        ✓ Journey complete — {log.triggered ? 'Intervention executed' : 'no intervention needed'}
-                                    </div>
-                                );
-                            }
-                            if (log.type === 'error') {
-                                return <div key={idx} className="text-red-500 mt-4 bg-red-950/50 p-2 rounded">❌ Error: {log.message}</div>;
-                            }
-                        })}
-                        <div ref={logsEndRef} />
-                    </div>
-                </div>
-            </div>
-
-            {/* --- BOTTOM BAR --- */}
-            <div
-                className={`fixed bottom-0 left-0 w-full bg-zinc-900 border-t border-zinc-800 shadow-2xl transition-transform duration-500 z-50 ${status === 'complete' ? 'translate-y-0' : 'translate-y-full'}`}
-            >
-                <div className="h-20 max-w-screen-2xl mx-auto px-8 flex flex-col md:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        {completionResult?.triggered ? (
-                            <span className="text-red-400 font-bold flex items-center gap-2">🚨 Intervention was triggered during the journey</span>
-                        ) : (
-                            <span className="text-green-400 font-bold flex items-center gap-2">✓ Customer completed {totalWeeks} weeks safely</span>
-                        )}
-                    </div>
-                    <Link
-                        to={`/customer/${id}`}
-                        className="bg-[#004ac6] text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-blue-500/20 transition-transform active:scale-95"
-                    >
-                        View Full Customer Profile →
-                    </Link>
+                    {showAgents && (
+                        <div className="pt-10 animate-fade-in">
+                            <button
+                                onClick={() => navigate(`/customer/${id}`)}
+                                className="w-full h-16 bg-white text-zinc-950 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-4 hover:bg-emerald-500 hover:text-white transition-all shadow-2xl shadow-white/5"
+                            >
+                                <UserCheck size={18} /> View Intervention Audit
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -61,11 +61,16 @@ def predict(kafka_message: dict) -> dict:
     customer_id = kafka_message["customer_id"]
 
     try:
-        risk_score, shap_factors = score_from_kafka(kafka_message)
+        ml_data = score_from_kafka(kafka_message)
+        risk_score = ml_data["risk_score"]
+        shap_factors = ml_data["shap_factors"]
+        lgb_p = ml_data.get("lgb_p", risk_score)
+        gru_p = ml_data.get("gru_p", risk_score)
         _used_real_model = True
     except Exception as e:
         logger.warning(f"[ML] Real model failed for {customer_id}, using mock: {e}")
         risk_score, shap_factors = _mock_score_fallback(kafka_message)
+        lgb_p, gru_p = risk_score * 0.9, risk_score * 1.1 # Mock spread
         _used_real_model = False
 
     risk_level = get_risk_level(risk_score)
@@ -132,6 +137,8 @@ def predict(kafka_message: dict) -> dict:
         "prediction_id":  prediction_id,
         "observation_week": kafka_message["observation_week"],
         "risk_score":     risk_score,
+        "lgb_p":          lgb_p,
+        "gru_p":          gru_p,
         "risk_level":     risk_level,
         "shap_factors":   shap_factors,
         "customer_profile": customer_profile,

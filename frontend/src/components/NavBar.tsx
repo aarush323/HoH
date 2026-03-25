@@ -2,12 +2,10 @@ import { NavLink, useLocation } from 'react-router-dom'
 
 const links = [
     { to: '/dashboard', label: 'Dashboard' },
-    { to: '/live', label: 'Live Feed' },
-    { to: '/customer/C00011', label: 'Customer Journey' },
-    { to: '/portfolio', label: 'Portfolio' },
+    { to: '/live', label: 'Live Stream' },
+    { to: '/portfolio', label: 'Customer Dashboard' },
+    { to: '/outreach', label: 'Outreach Dashboard' },
     { to: '/shocks', label: 'Shock Events' },
-    { to: '/outreach', label: 'Outreach' },
-    { to: '/journey/C00011', label: 'Journey Replay' },
 ]
 
 export default function NavBar() {

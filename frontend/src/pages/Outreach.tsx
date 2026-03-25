@@ -2,6 +2,17 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { AuditRecord } from '../types'
+import {
+    MessageSquare,
+    Phone,
+    ShieldCheck,
+    ChevronRight,
+    ArrowUpRight,
+    User,
+    CheckCircle2,
+    XCircle,
+    Activity
+} from 'lucide-react'
 
 export default function Outreach() {
     const [audit, setAudit] = useState<AuditRecord[]>([])
@@ -16,112 +27,112 @@ export default function Outreach() {
             .finally(() => setLoading(false))
     }, [])
 
-    if (loading) return <div className="flex items-center justify-center min-h-[60vh] text-zinc-400 text-sm">Loading outreach queue...</div>
+    if (loading) return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="w-12 h-12 border-4 border-zinc-100 border-t-indigo-600 rounded-full animate-spin" />
+        </div>
+    )
 
-    const filtered = filter === 'all'
-        ? audit
-        : filter === 'pending'
-            ? audit.filter((a) => !a.outcome && !a.voice_outcome && !a.hard_stop)
-            : filter === 'accepted'
-                ? audit.filter((a) => a.voice_outcome === 'accepted' || a.outcome === 'accepted')
-                : filter === 'declined'
-                    ? audit.filter((a) => a.voice_outcome === 'declined' || a.outcome === 'declined')
-                    : filter === 'hard_stop'
-                        ? audit.filter((a) => a.hard_stop)
-                        : audit
+    const filtered = filter === 'all' ? audit : audit.filter(a => a.status === filter || a.voice_outcome === filter)
 
-    const StatusBadge = ({ record }: { record: AuditRecord }) => {
-        if (record.hard_stop) return <span className="px-2 py-1 rounded-md text-[10px] font-bold uppercase bg-red-50 text-red-700">Hard Stop</span>
-        if (record.voice_outcome === 'accepted' || record.outcome === 'accepted')
-            return <span className="px-2 py-1 rounded-md text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700">Accepted</span>
-        if (record.voice_outcome === 'declined' || record.outcome === 'declined')
-            return <span className="px-2 py-1 rounded-md text-[10px] font-bold uppercase bg-red-50 text-red-700">Declined</span>
-        if (record.voice_outcome === 'escalated')
-            return <span className="px-2 py-1 rounded-md text-[10px] font-bold uppercase bg-amber-50 text-amber-700">Escalated</span>
-        if (record.status === 'dispatched')
-            return <span className="px-2 py-1 rounded-md text-[10px] font-bold uppercase bg-blue-50 text-blue-700">Dispatched</span>
-        return <span className="px-2 py-1 rounded-md text-[10px] font-bold uppercase bg-zinc-100 text-zinc-600">Pending</span>
+    const stats = {
+        total: audit.length,
+        resolved: audit.filter(a => a.status === 'Resolved' || a.voice_outcome === 'accepted').length,
+        escalated: audit.filter(a => a.voice_escalate).length
     }
 
     return (
-        <div className="animate-fade-in-up">
-            <div className="mb-8 flex justify-between items-end">
-                <div>
-                    <span className="text-[10px] uppercase tracking-widest font-bold text-[#737686] mb-1 block">Approval Workflow</span>
-                    <h1 className="text-[1.75rem] font-bold tracking-tight text-zinc-900 leading-none">Outreach Queue</h1>
+        <div className="animate-fade-in pb-32 max-w-[1240px] mx-auto px-6 font-sans text-zinc-900 selection:bg-indigo-50 leading-tight">
+
+            {/* Header with KPIs */}
+            <div className="pt-20 mb-16 flex flex-col md:flex-row justify-between items-end gap-10">
+                <div className="space-y-4">
+                    <div className="text-[10px] font-black uppercase tracking-[.4em] text-zinc-400">Intervention Analysis</div>
+                    <h1 className="text-5xl font-black tracking-tighter text-zinc-950 leading-none">Outreach Hub</h1>
                 </div>
-                <div className="text-xs text-zinc-400 tabular">{filtered.length} records</div>
+
+                <div className="flex gap-10">
+                    <div className="text-right">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Efficiency</div>
+                        <div className="text-3xl font-black text-emerald-500 tabular">{Math.round((stats.resolved / stats.total) * 100 || 0)}%</div>
+                    </div>
+                    <div className="text-right border-l border-zinc-100 pl-10">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Active Calls</div>
+                        <div className="text-3xl font-black text-indigo-600 tabular">{stats.total}</div>
+                    </div>
+                </div>
             </div>
 
-            {/* Filter tabs */}
-            <div className="flex gap-2 mb-6">
-                {[
-                    { key: 'all', label: 'All' },
-                    { key: 'pending', label: 'Pending' },
-                    { key: 'accepted', label: 'Accepted' },
-                    { key: 'declined', label: 'Declined' },
-                    { key: 'hard_stop', label: 'Hard Stop' },
-                ].map((t) => (
+            {/* Sub-Nav Filters */}
+            <div className="flex gap-4 mb-12">
+                {['all', 'dispatched', 'accepted', 'declined', 'escalated'].map((f) => (
                     <button
-                        key={t.key}
-                        onClick={() => setFilter(t.key)}
-                        className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${filter === t.key ? 'bg-[#004ac6] text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                            }`}
-                    >{t.label}</button>
+                        key={f}
+                        onClick={() => setFilter(f)}
+                        className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === f ? 'bg-zinc-950 text-white shadow-xl' : 'bg-zinc-50 text-zinc-400 hover:bg-zinc-100'}`}
+                    >
+                        {f}
+                    </button>
                 ))}
             </div>
 
-            {/* Records */}
-            {filtered.length === 0 ? (
-                <div className="text-center py-20 text-zinc-400 text-sm">No outreach records found. Run the pipeline to generate interventions.</div>
-            ) : (
-                <div className="space-y-3">
-                    {filtered.map((a) => (
-                        <div
-                            key={a.id}
-                            onClick={() => navigate(`/customer/${a.customer_id}`)}
-                            className="bg-white rounded-2xl ghost-border shadow-sm p-5 hover:shadow-md transition-all cursor-pointer"
-                        >
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                                        {a.customer_id.slice(-2)}
+            {/* Interaction List */}
+            <div className="grid grid-cols-1 gap-6">
+                {filtered.length === 0 ? (
+                    <div className="py-20 text-center text-[11px] font-black uppercase tracking-widest text-zinc-300 italic">No Active Interaction History</div>
+                ) : (
+                    filtered.map((a) => {
+                        const isAccepted = a.voice_outcome === 'accepted' || a.outcome === 'accepted';
+                        const isDeclined = a.voice_outcome === 'declined' || a.outcome === 'declined';
+                        const isVoice = a.selected_channel === 'voice';
+
+                        return (
+                            <div
+                                key={a.id}
+                                onClick={() => navigate(`/customer/${a.customer_id}`)}
+                                className="group bg-white p-8 rounded-[1.5rem] border border-zinc-100 shadow-sm transition-all hover:shadow-2xl hover:border-zinc-200 cursor-pointer flex items-center gap-12"
+                            >
+                                {/* Left Section: Identity */}
+                                <div className="w-1/4 flex items-center gap-6 border-r border-zinc-50 mr-6">
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isVoice ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                        {isVoice ? <Phone size={20} /> : <MessageSquare size={20} />}
                                     </div>
                                     <div>
-                                        <div className="text-sm font-bold">{a.customer_id}</div>
-                                        <div className="text-xs text-zinc-400 flex items-center gap-2 mt-0.5">
-                                            <span className="capitalize">{a.intervention_method?.replace(/_/g, ' ') || '—'}</span>
-                                            <span className="w-1 h-1 rounded-full bg-zinc-300" />
-                                            <span className="capitalize">{a.selected_channel?.replace(/_/g, ' ') || '—'}</span>
-                                            {a.voice_turns && (
-                                                <>
-                                                    <span className="w-1 h-1 rounded-full bg-zinc-300" />
-                                                    <span>{a.voice_turns} turns</span>
-                                                </>
-                                            )}
-                                        </div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5">{a.customer_id}</div>
+                                        <div className="text-sm font-black text-zinc-950">{a.selected_channel} Interaction</div>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    {a.message_tone && (
-                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-50 text-zinc-500">{a.message_tone}</span>
-                                    )}
-                                    <StatusBadge record={a} />
-                                    <span className="text-[10px] text-zinc-400 tabular min-w-[80px] text-right">
-                                        {a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}
-                                    </span>
+
+                                {/* Deep Context Strip */}
+                                <div className="flex-1 flex flex-col gap-4">
+                                    <div className="flex items-center gap-6">
+                                        <div className="px-3 py-1 bg-zinc-50 rounded-lg text-[9px] font-black uppercase tracking-widest text-zinc-400"> Tone: {a.message_tone}</div>
+                                        <div className="flex items-center gap-2 text-zinc-300 text-[10px] font-bold">
+                                            <Activity size={10} /> Stress Analysis Confirmed
+                                        </div>
+                                    </div>
+                                    <p className="text-[12px] font-bold text-zinc-500 leading-relaxed italic line-clamp-1">"{a.message_content}"</p>
+                                </div>
+
+                                {/* Outcome State */}
+                                <div className="w-1/4 flex items-center justify-end gap-10 border-l border-zinc-50 ml-10">
+                                    <div className="text-right">
+                                        <div className="text-[9px] font-black uppercase text-zinc-400 tracking-widest mb-1.5">Outcome</div>
+                                        <div className={`text-xs font-black uppercase tracking-widest flex items-center gap-2 justify-end ${isAccepted ? 'text-emerald-500' : isDeclined ? 'text-red-500' : 'text-zinc-400'}`}>
+                                            {isAccepted ? <CheckCircle2 size={12} /> : isDeclined ? <XCircle size={12} /> : null}
+                                            {a.voice_outcome || a.status}
+                                        </div>
+                                    </div>
+                                    <div className="w-12 h-12 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-200 group-hover:bg-zinc-950 group-hover:text-white transition-all shadow-sm">
+                                        <ChevronRight size={18} strokeWidth={3} />
+                                    </div>
                                 </div>
                             </div>
-                            {a.message_content && (
-                                <p className="mt-3 text-xs text-zinc-500 leading-relaxed line-clamp-2">"{a.message_content}"</p>
-                            )}
-                            {a.hard_stop_reason && (
-                                <p className="mt-2 text-xs text-red-600 font-medium">⚠ {a.hard_stop_reason}</p>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            )}
+                        )
+                    })
+                )}
+            </div>
+
         </div>
     )
 }
