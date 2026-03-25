@@ -80,6 +80,25 @@ def get_score(customer_id: str):
     return {"customer_id": customer_id, "source": "computed", **score_data}
 
 
+@app.post("/predict")
+async def run_predict(request: Request):
+    """ML inference only - run predict on provided record."""
+    try:
+        record = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    customer_id = record.get("customer_id")
+
+    try:
+        ml_result = predict(record)
+        print(f"[Predict] ML completed for {customer_id}")
+        return ml_result
+    except Exception as e:
+        print(f"[Predict] ML failed for {customer_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"ML prediction failed: {e}")
+
+
 @app.post("/intervene/{customer_id}")
 async def intervene(customer_id: str, request: Request):
     try:
@@ -87,16 +106,23 @@ async def intervene(customer_id: str, request: Request):
     except Exception:
         body = {}
 
-    if "kafka_message" in body:
-        # Auto-triggered by consumer — raw signals passed directly
-        kafka_message = body["kafka_message"]
-    else:
-        # Manual trigger — fetch latest signals from DB
-        kafka_message = get_latest_as_kafka_message(customer_id)
-        if not kafka_message:
-            raise HTTPException(status_code=404, detail="Customer not found in DB")
+    kafka_message = body.get("kafka_message")
+    ml_result = body.get("ml_result")
 
-    ml_result = predict(kafka_message)
+    if not ml_result:
+        # No pre-computed ML result - run predict
+        if kafka_message:
+            ml_result = predict(kafka_message)
+        else:
+            # Manual trigger — fetch from DB
+            kafka_message = get_latest_as_kafka_message(customer_id)
+            if not kafka_message:
+                raise HTTPException(status_code=404, detail="Customer not found in DB")
+            ml_result = predict(kafka_message)
+
+    print(
+        f"[Intervene] Running agents for {customer_id} with risk_score={ml_result.get('risk_score')}"
+    )
 
     initial_state: Main_context = {
         "prediction_id": ml_result["prediction_id"],
@@ -121,46 +147,14 @@ async def intervene(customer_id: str, request: Request):
 
     try:
         result = graph.invoke(initial_state)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Agent pipeline failed: {str(e)}")
-
-    try:
-        print("DEBUG - RESULT:", result)
-
-        voice_result = result.get("voice_result")
-        if not isinstance(voice_result, dict):
-            voice_result = {}
-
-        call_memory = voice_result.get("call_memory")
-        if not isinstance(call_memory, dict):
-            call_memory = {}
-
-        intervention_method = result.get("Intervention_method")
-        message_content = result.get("Message_content")
-
-        # Handle monitor_only specifically for cleaner response
-        if intervention_method == "monitor_only" and not message_content:
-            message_content = "No intervention required. Monitoring only."
-
-        return {
-            "customer_id": customer_id,
-            "risk_score": result.get("total_risk_score"),
-            "risk_level": result.get("risk_level"),
-            "hard_stop": result.get("hard_stop"),
-            "hard_stop_reason": result.get("hard_stop_reason"),
-            "intervention_method": intervention_method,
-            "selected_channel": result.get("selected_channel"),
-            "message_content": message_content,
-            "voice_outcome": voice_result.get("outcome"),
-            "offer_accepted": call_memory.get("offer_accepted"),
-            "turns_taken": voice_result.get("turns_taken"),
-        }
+        print("[Intervene] Agents completed successfully")
+        return {"status": "success", "customer_id": customer_id}
     except Exception as e:
         import traceback
 
-        print("CRITICAL ERROR IN API RETURN BLOCK:")
+        print(f"[Intervene] Error: {e}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"API error: {str(e)}")
+        return {"status": "error", "customer_id": customer_id, "error": str(e)}
 
 
 @app.get("/outreach/{customer_id}")
@@ -233,62 +227,19 @@ async def ingest_record(request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
     customer_id = record.get("customer_id")
-    observation_week = record.get("observation_week")
 
-    # 0. Check for duplicate ML prediction
-    skip_ml = False
-    try:
-        with get_connection() as conn:
-            exists = conn.execute(
-                text("""
-                SELECT 1 FROM model_predictions 
-                WHERE customer_id = :cid AND observation_week = :week
-                LIMIT 1
-            """),
-                {"cid": customer_id, "week": observation_week},
-            ).fetchone()
-            if exists:
-                skip_ml = True
-                print(
-                    f"[Ingest] Skipping ML - already predicted for {customer_id} week {observation_week}"
-                )
-    except Exception as e:
-        print(f"[Ingest] Duplicate check failed: {e}")
-
-    # 1. Persist observation to database
+    # 1. Persist observation to database (DB persistence only)
     try:
         from pipeline.consumer import insert_into_db
         from fastapi.concurrency import run_in_threadpool
 
         await run_in_threadpool(insert_into_db, record)
+        print(f"[Ingest] Stored to DB: {customer_id}")
     except Exception as e:
         print(f"[Ingest Error] DB persist failed: {e}")
+        raise HTTPException(status_code=500, detail=f"DB persist failed: {e}")
 
-    # 2. Run inference (updates model_predictions) - skip if already done
-    if skip_ml:
-        prediction_result = {"risk_score": 0.0, "risk_level": "Low"}
-    else:
-        try:
-            prediction_result = predict(record)
-        except Exception as e:
-            print(f"[Ingest Error] Predict failed: {e}")
-            prediction_result = {"risk_score": 0.0, "risk_level": "Low"}
-
-    # 3. Check if we should fire intervention
-    from pipeline.consumer import should_trigger
-
-    triggered = should_trigger(record)
-    if triggered:
-
-        async def run_intervention():
-            try:
-                await intervene(customer_id, request)
-            except:
-                pass
-
-        asyncio.create_task(run_intervention())
-
-    # 4. Notify SSE clients via Redis pub/sub
+    # 2. Notify SSE clients via Redis pub/sub
     try:
         from db.redis_client import publish_update
 
@@ -297,10 +248,8 @@ async def ingest_record(request: Request):
         print(f"[Ingest] Redis publish failed: {e}")
 
     return {
-        "status": "processed",
+        "status": "stored",
         "customer_id": customer_id,
-        "risk_score": prediction_result.get("risk_score"),
-        "intervention_triggered": triggered,
     }
 
 

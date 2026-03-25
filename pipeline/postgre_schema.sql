@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS interventions (
     intervention_justification  TEXT,
     eligible_interventions      TEXT[],
     selected_channel            VARCHAR(20),
-    message_tone                VARCHAR(30),
+    message_tone                VARCHAR(100),
     message_content             TEXT,
     channel_dispatch_result     JSONB,
     hard_stop                   BOOLEAN DEFAULT FALSE,

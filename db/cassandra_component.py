@@ -8,16 +8,17 @@ load_dotenv()
 CASSANDRA_KEYSPACE = os.getenv("CASSANDRA_KEYSPACE", "predelinquency")
 
 profile = ExecutionProfile(
-    load_balancing_policy=DCAwareRoundRobinPolicy(local_dc='datacenter1')
+    load_balancing_policy=DCAwareRoundRobinPolicy(local_dc="datacenter1")
 )
 
 cluster = Cluster(
-    contact_points=["127.0.0.1"],
+    contact_points=[os.getenv("CASSANDRA_HOST", "cassandra")],
     port=9042,
     execution_profiles={EXEC_PROFILE_DEFAULT: profile},
     protocol_version=4,
-    connect_timeout=30
+    connect_timeout=30,
 )
+
 
 def create_tables_if_not_exist(session):
     session.execute("""
@@ -68,21 +69,27 @@ def create_tables_if_not_exist(session):
         );
     """)
 
+
 def get_session():
     s = cluster.connect()
+    s.execute(
+        f"CREATE KEYSPACE IF NOT EXISTS {CASSANDRA_KEYSPACE} WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}"
+    )
     s.set_keyspace(CASSANDRA_KEYSPACE)
     create_tables_if_not_exist(s)
     return s
 
+
 def close():
     cluster.shutdown()
+
 
 def test_connection():
     try:
         s = get_session()
         rows = s.execute(
             "SELECT table_name FROM system_schema.tables WHERE keyspace_name=%s",
-            [CASSANDRA_KEYSPACE]
+            [CASSANDRA_KEYSPACE],
         )
         tables = [r.table_name for r in rows]
         print(f"Cassandra connected. Tables: {tables}")
@@ -90,6 +97,7 @@ def test_connection():
         print(f"Cassandra connection failed: {e}")
     finally:
         close()
+
 
 if __name__ == "__main__":
     test_connection()

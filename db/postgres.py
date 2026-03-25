@@ -16,8 +16,10 @@ DATABASE_URL = (
 engine = create_engine(DATABASE_URL, pool_size=5, max_overflow=10)
 SessionLocal = sessionmaker(bind=engine)
 
+
 def get_connection():
     return engine.connect()
+
 
 def test_connection():
     try:
@@ -27,6 +29,7 @@ def test_connection():
     except Exception as e:
         print(f"Postgres connection failed: {e}")
 
+
 if __name__ == "__main__":
     test_connection()
 
@@ -34,7 +37,8 @@ if __name__ == "__main__":
 def create_tables_if_not_exist():
     with engine.begin() as conn:
         # 1. Base Staging
-        conn.execute(text("""
+        conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS raw_observations_staging (
                 customer_id                     VARCHAR(20),
                 observation_week                DATE,
@@ -85,10 +89,12 @@ def create_tables_if_not_exist():
                 ingested_at                     TIMESTAMPTZ DEFAULT NOW(),
                 PRIMARY KEY (customer_id, observation_week)
             )
-        """))
+        """)
+        )
 
         # 2. Core Entities
-        conn.execute(text("""
+        conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS customers (
                 customer_id                 VARCHAR(20) PRIMARY KEY,
                 name                        VARCHAR(100),
@@ -109,10 +115,12 @@ def create_tables_if_not_exist():
                 created_at                  TIMESTAMPTZ DEFAULT NOW(),
                 updated_at                  TIMESTAMPTZ DEFAULT NOW()
             )
-        """))
+        """)
+        )
 
         # 3. Features & Predictions
-        conn.execute(text("""
+        conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS weekly_features (
                 id                              BIGSERIAL PRIMARY KEY,
                 customer_id                     VARCHAR(20) REFERENCES customers(customer_id),
@@ -158,11 +166,17 @@ def create_tables_if_not_exist():
                 synced_at                       TIMESTAMPTZ DEFAULT NOW(),
                 UNIQUE (customer_id, observation_week)
             )
-        """))
+        """)
+        )
 
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_weekly_features_customer_week ON weekly_features (customer_id, observation_week)"))
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_weekly_features_customer_week ON weekly_features (customer_id, observation_week)"
+            )
+        )
 
-        conn.execute(text("""
+        conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS model_predictions (
                 id                  BIGSERIAL PRIMARY KEY,
                 customer_id         VARCHAR(20) REFERENCES customers(customer_id),
@@ -174,11 +188,17 @@ def create_tables_if_not_exist():
                 model_version       VARCHAR(30),
                 predicted_at        TIMESTAMPTZ DEFAULT NOW()
             )
-        """))
+        """)
+        )
 
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_predictions_customer ON model_predictions (customer_id)"))
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_predictions_customer ON model_predictions (customer_id)"
+            )
+        )
 
-        conn.execute(text("""
+        conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS shap_explanations (
                 id              BIGSERIAL PRIMARY KEY,
                 prediction_id   BIGINT REFERENCES model_predictions(id),
@@ -188,12 +208,18 @@ def create_tables_if_not_exist():
                 feature_value   NUMERIC(14,4),
                 rank            INT
             )
-        """))
+        """)
+        )
 
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_shap_customer ON shap_explanations (customer_id)"))
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_shap_customer ON shap_explanations (customer_id)"
+            )
+        )
 
         # 4. Context & Interventions
-        conn.execute(text("""
+        conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS stress_context (
                 id              BIGSERIAL PRIMARY KEY,
                 customer_id     VARCHAR(20) REFERENCES customers(customer_id),
@@ -204,9 +230,11 @@ def create_tables_if_not_exist():
                 recommended_action TEXT,
                 created_at      TIMESTAMPTZ DEFAULT NOW()
             )
-        """))
+        """)
+        )
 
-        conn.execute(text("""
+        conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS interventions (
                 id                          BIGSERIAL PRIMARY KEY,
                 customer_id                 VARCHAR(20) REFERENCES customers(customer_id),
@@ -217,7 +245,7 @@ def create_tables_if_not_exist():
                 intervention_justification  TEXT,
                 eligible_interventions      TEXT[],
                 selected_channel            VARCHAR(20),
-                message_tone                VARCHAR(30),
+                message_tone                VARCHAR(100),
                 message_content             TEXT,
                 channel_dispatch_result     JSONB,
                 hard_stop                   BOOLEAN DEFAULT FALSE,
@@ -228,11 +256,17 @@ def create_tables_if_not_exist():
                 resolved_at                 TIMESTAMPTZ,
                 UNIQUE (customer_id, observation_week)
             )
-        """))
+        """)
+        )
 
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_interventions_customer ON interventions (customer_id)"))
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_interventions_customer ON interventions (customer_id)"
+            )
+        )
 
-        conn.execute(text("""
+        conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS voice_sessions (
                 id                      BIGSERIAL PRIMARY KEY,
                 intervention_id         BIGINT REFERENCES interventions(id),
@@ -246,9 +280,9 @@ def create_tables_if_not_exist():
                 call_duration_seconds   INT,
                 created_at              TIMESTAMPTZ DEFAULT NOW()
             )
-        """))
+        """)
+        )
 
-        
         alter_statements = [
             "ALTER TABLE raw_observations_staging ADD COLUMN IF NOT EXISTS monthly_income_inr NUMERIC(14,2);",
             "ALTER TABLE raw_observations_staging ADD COLUMN IF NOT EXISTS emi_amount_inr NUMERIC(12,2);",
@@ -264,7 +298,6 @@ def create_tables_if_not_exist():
             "ALTER TABLE raw_observations_staging ADD COLUMN IF NOT EXISTS savings_drawdown_velocity NUMERIC(8,4);",
             "ALTER TABLE raw_observations_staging ADD COLUMN IF NOT EXISTS external_shock_flag BOOLEAN;",
             "ALTER TABLE raw_observations_staging ADD COLUMN IF NOT EXISTS shock_type VARCHAR(64);",
-            
             "ALTER TABLE weekly_features ADD COLUMN IF NOT EXISTS monthly_income_inr NUMERIC(14,2);",
             "ALTER TABLE weekly_features ADD COLUMN IF NOT EXISTS emi_amount_inr NUMERIC(12,2);",
             "ALTER TABLE weekly_features ADD COLUMN IF NOT EXISTS emi_due_this_week BOOLEAN;",
@@ -278,8 +311,10 @@ def create_tables_if_not_exist():
             "ALTER TABLE weekly_features ADD COLUMN IF NOT EXISTS upi_lending_delta NUMERIC(12,4);",
             "ALTER TABLE weekly_features ADD COLUMN IF NOT EXISTS savings_drawdown_velocity NUMERIC(8,4);",
             "ALTER TABLE weekly_features ADD COLUMN IF NOT EXISTS external_shock_flag BOOLEAN;",
-            "ALTER TABLE weekly_features ADD COLUMN IF NOT EXISTS shock_type VARCHAR(64);"
+            "ALTER TABLE weekly_features ADD COLUMN IF NOT EXISTS shock_type VARCHAR(64);",
+            "ALTER TABLE stress_context ADD COLUMN IF NOT EXISTS recommended_action TEXT;",
+            "ALTER TABLE interventions ALTER COLUMN message_tone TYPE VARCHAR(100);",
         ]
-        
+
         for stmt in alter_statements:
             conn.execute(text(stmt))

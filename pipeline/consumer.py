@@ -55,17 +55,30 @@ API_BASE = "http://localhost:8000"
 
 
 def should_trigger(record: dict) -> bool:
-    return (
-        record.get("salary_delay_days", 0) > STRESS_THRESHOLDS["salary_delay_days"]
-        or record.get("auto_debit_failures", 0)
-        >= STRESS_THRESHOLDS["auto_debit_failures"]
-        or record.get("savings_drawdown_pct", 0.0)
-        < STRESS_THRESHOLDS["savings_drawdown_pct"]
-        or record.get("utility_payment_delay_days", 0)
-        > STRESS_THRESHOLDS["utility_payment_delay_days"]
-        or record.get("emi_bounced_flag", False) == True
-        or record.get("missed_emi_count_rolling", 0) >= 2
+    salary_delay = record.get("salary_delay_days", 0)
+    auto_debit = record.get("auto_debit_failures", 0)
+    savings_drawdown = record.get("savings_drawdown_pct", 0.0)
+    utility_delay = record.get("utility_payment_delay_days", 0)
+    emi_bounced = record.get("emi_bounced_flag", False)
+    missed_emi = record.get("missed_emi_count_rolling", 0)
+
+    triggered = (
+        salary_delay > STRESS_THRESHOLDS["salary_delay_days"]
+        or auto_debit >= STRESS_THRESHOLDS["auto_debit_failures"]
+        or savings_drawdown < STRESS_THRESHOLDS["savings_drawdown_pct"]
+        or utility_delay > STRESS_THRESHOLDS["utility_payment_delay_days"]
+        or emi_bounced == True
+        or missed_emi >= 2
     )
+
+    print(
+        f"[Rules] salary_delay={salary_delay}(>3:{salary_delay > 3}) "
+        f"auto_debit={auto_debit}(>=2:{auto_debit >= 2}) "
+        f"savings_drawdown={savings_drawdown}(<-20:{savings_drawdown < -20.0}) "
+        f"triggered={triggered}"
+    )
+
+    return triggered
 
 
 def fire_intervention(record: dict):
@@ -292,6 +305,12 @@ def run_consumer():
     """Main consumer loop - call this to start consuming from Kafka."""
     try:
         cons = get_consumer()
+
+        # Reset offset to beginning for fresh start (demo purposes)
+        print("[Consumer] Resetting offset to beginning for fresh start...")
+        for partition in cons.assignment() or []:
+            cons.seek_to_beginning(partition)
+
         print(f"[Consumer] Listening on topic '{KAFKA_TOPIC}'...\n")
 
         for message in cons:
@@ -307,17 +326,63 @@ def run_consumer():
                 f"default_risk={record['will_default_next_2_4_weeks']}"
             )
 
-            try:
-                httpx.post(f"{API_BASE}/ingest", json=record, timeout=60.0)
-            except Exception as e:
-                print(f"[Consumer Error] Ingest call failed for {customer_id}: {e}")
+            # Check rules FIRST - decide whether to trigger ML + agents
+            triggered = should_trigger(record)
+            print(f"[Consumer] Rules check: triggered={triggered}")
 
-            try:
-                from db.redis_client import invalidate_customer
+            if triggered:
+                # Route: ingest → predict → intervene
+                try:
+                    ingest_resp = httpx.post(
+                        f"{API_BASE}/ingest", json=record, timeout=60.0
+                    )
+                    print(
+                        f"[Consumer] DB stored: {customer_id} → {ingest_resp.status_code}"
+                    )
+                except Exception as e:
+                    print(f"[Consumer Error] Ingest failed for {customer_id}: {e}")
+                    continue
 
-                invalidate_customer(customer_id)
+                try:
+                    predict_resp = httpx.post(
+                        f"{API_BASE}/predict", json=record, timeout=60.0
+                    )
+                    ml_result = predict_resp.json()
+                    print(
+                        f"[Consumer] ML completed: {customer_id} → risk={ml_result.get('risk_score')}"
+                    )
+                except Exception as e:
+                    print(f"[Consumer Error] Predict failed for {customer_id}: {e}")
+                    continue
+
+                try:
+                    intervene_resp = httpx.post(
+                        f"{API_BASE}/intervene/{customer_id}",
+                        json={"kafka_message": record, "ml_result": ml_result},
+                        timeout=120.0,
+                    )
+                    print(
+                        f"[Consumer] Agents completed: {customer_id} → {intervene_resp.status_code}"
+                    )
+                except Exception as e:
+                    print(f"[Consumer Error] Intervene failed for {customer_id}: {e}")
+            else:
+                # Route: ingest only (DB persistence, no ML, no agents)
+                try:
+                    ingest_resp = httpx.post(
+                        f"{API_BASE}/ingest", json=record, timeout=60.0
+                    )
+                    print(
+                        f"[Consumer] DB stored (not triggered): {customer_id} → {ingest_resp.status_code}"
+                    )
+                except Exception as e:
+                    print(f"[Consumer Error] Ingest failed for {customer_id}: {e}")
+
+            # Commit Kafka offset after successful processing
+            try:
+                cons.commit()
             except Exception as e:
-                print(f"[Consumer] Redis invalidate failed: {e}")
+                print(f"[Consumer] Offset commit failed: {e}")
 
     except KeyboardInterrupt:
         print("[Consumer] Shutting down...")
