@@ -149,3 +149,111 @@ export interface CustomerDetailOverview {
     } | null;
     audit: AuditRecord[];
 }
+
+// Extended customer type for tabular display with additional fields
+export interface CustomerDetail extends CustomerSummary {
+    loan_amount: number;
+    last_channel: string | null;
+    last_outcome: string | null;
+    last_status: string | null;
+}
+
+// Voice customer with intervention details
+export interface VoiceCustomer extends CustomerDetail {
+    intervention_method: string;
+    intervention_date: string | null;
+}
+
+// Dashboard statistics
+export interface DashboardStats {
+    total_customers: number;
+    high_risk_count: number;
+    medium_risk_count: number;
+    low_risk_count: number;
+    total_exposure: number;
+    at_risk_percentage: number;
+    channel_mix: {
+        voice: number;
+        email: number;
+        sms: number;
+    };
+    active_interventions: number;
+    resolution_rate: number;
+    acceptance_rate: number;
+    risk_by_product: {
+        home_loan: { at_risk: number };
+        credit_card: { at_risk: number };
+        personal_loan: { at_risk: number };
+    };
+    top_stress_factors: {
+        factor: string;
+        count: number;
+        avg_contribution: number;
+    }[];
+}
+
+// Journey page SSE event types
+export interface JourneyCustomerEvent {
+    type: 'customer';
+    data: {
+        customer: {
+            customer_id: string;
+            name?: string;
+            age?: number;
+            customer_segment?: string;
+            geography_zone?: string;
+            product_type?: string;
+            account_vintage_months?: number;
+            loan_amount?: number;
+        };
+    };
+}
+
+export interface JourneyWeekEvent {
+    type: 'week';
+    week: number;
+    week_number: number;
+    score: number;
+    lgb_p: number;
+    gru_p: number;
+    risk_level: string;
+    shap_factors: ShapFactor[];
+    top_factor?: string;
+    top_factor_direction?: string;
+    top_factor_value?: number;
+    threshold_crossed: boolean;
+    signals: {
+        salary_delay_days: number;
+        auto_debit_failures: number;
+        avg_daily_balance_inr: number;
+        emi_bounced_flag: boolean;
+    };
+}
+
+export interface JourneyInterventionEvent {
+    type: 'intervention';
+    week: number;
+    week_number: number;
+    score: number;
+    risk_level: string;
+    method: string;
+    channel: string;
+    message: string;
+    voice_outcome: string | null;
+    offer_accepted?: boolean;
+    hard_stop: boolean;
+    hard_stop_reason: string | null;
+}
+
+export interface JourneyCompleteEvent {
+    type: 'complete';
+    triggered: boolean;
+}
+
+export type JourneyEvent =
+    | JourneyCustomerEvent
+    | JourneyWeekEvent
+    | JourneyInterventionEvent
+    | JourneyCompleteEvent
+    | { type: 'ping' }
+    | { type: 'error'; message: string };

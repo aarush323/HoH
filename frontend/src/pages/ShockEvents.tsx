@@ -4,13 +4,9 @@ import { api } from '../api/client'
 import type { CustomerSummary, Rules } from '../types'
 import {
     ShieldAlert,
-    ArrowUpRight,
-    Search,
     ChevronRight,
-    Activity,
     Globe,
     Zap,
-    Lock
 } from 'lucide-react'
 
 export default function ShockEvents() {
@@ -105,7 +101,7 @@ export default function ShockEvents() {
 
                     {rules ? (
                         <div className="space-y-6">
-                            {Object.entries(rules.thresholds).map(([key, val], i) => (
+                            {Object.entries(rules.thresholds).map(([key, val]) => (
                                 <div key={key} className="p-6 bg-zinc-50 rounded-2xl border border-transparent hover:border-zinc-100 transition-all group">
                                     <div className="flex justify-between items-center mb-1">
                                         <div className="text-[9px] font-black uppercase tracking-widest text-zinc-400">{key.replace('_', ' ')}</div>

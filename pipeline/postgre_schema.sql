@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS stress_context (
     customer_id     VARCHAR(20) REFERENCES customers(customer_id),
     prediction_id   BIGINT REFERENCES model_predictions(id),
     narrative       TEXT,
-    stress_type     VARCHAR(50),
+    stress_type     VARCHAR(100),
     severity        VARCHAR(20),
     recommended_action TEXT,
     created_at      TIMESTAMPTZ DEFAULT NOW()
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS interventions (
     hard_stop                   BOOLEAN DEFAULT FALSE,
     hard_stop_reason            TEXT,
     status                      VARCHAR(20),
-    outcome                     VARCHAR(20),
+    outcome                     VARCHAR(30),
     created_at                  TIMESTAMPTZ DEFAULT NOW(),
     resolved_at                 TIMESTAMPTZ,
     UNIQUE (customer_id, observation_week)

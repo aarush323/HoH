@@ -12,6 +12,9 @@ from app.main import predict
 from pipeline.producer import run_producer
 from db.queries import (
     get_all_customers_with_risk,
+    get_all_customers_tabular,
+    get_voice_customers,
+    get_dashboard_stats,
     get_customer_full_profile,
     get_latest_as_kafka_message,
     get_intervention_history,
@@ -46,6 +49,24 @@ def startup():
 @app.get("/customers")
 def get_customers():
     return get_all_customers_with_risk()
+
+
+@app.get("/customers/all")
+def get_all_customers():
+    """Returns all customers with latest prediction for Dashboard/Portfolio."""
+    return get_all_customers_tabular()
+
+
+@app.get("/customers/voice")
+def get_voice_customers():
+    """Returns customers who received voice interventions."""
+    return get_voice_customers()
+
+
+@app.get("/dashboard/stats")
+def get_stats():
+    """Returns aggregated statistics for Dashboard KPIs."""
+    return get_dashboard_stats()
 
 
 @app.get("/customers/{customer_id}")
@@ -332,264 +353,122 @@ async def journey_stream(customer_id: str):
 
     async def event_generator():
         try:
-            # First verify customer exists
             customer = await run_in_threadpool(get_customer_full_profile, customer_id)
             if not customer:
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Customer not found'})}\n\n"
                 return
 
-            # Send customer info so frontend can populate header
             yield f"data: {json.dumps({'type': 'customer', 'data': customer}, default=str)}\n\n"
 
-            seen_weeks = set()  # track which weeks already streamed
-            intervention_sent = False
-            empty_polls = 0
-            MAX_EMPTY_POLLS = 60  # 120 seconds max wait (60 * 2s)
+            rows = await run_in_threadpool(get_weekly_observations_live, customer_id)
+            if not rows:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'No weekly data found for this customer'})}\n\n"
+                return
 
             intervention_needed = False
             last_breach_ml_result = None
+            seen_weeks = set()
 
-            while True:
-                # Poll DB for weekly_features rows written by consumer
-                rows = await run_in_threadpool(
-                    get_weekly_observations_live, customer_id
-                )
+            for kafka_message in rows:
+                week_key = kafka_message["observation_week"]
+                if week_key in seen_weeks:
+                    continue
+                seen_weeks.add(week_key)
 
-                # Only process weeks we haven't seen yet
-                new_rows = [r for r in rows if r["observation_week"] not in seen_weeks]
+                ml_result = await run_in_threadpool(predict, kafka_message)
 
-                if new_rows:
-                    empty_polls = 0
+                risk_score = ml_result["risk_score"]
+                risk_level = ml_result["risk_level"]
+                shap_factors = ml_result["shap_factors"]
+                top_shap = shap_factors[0] if shap_factors else {}
 
-                    for kafka_message in new_rows:
-                        week_key = kafka_message["observation_week"]
-                        seen_weeks.add(week_key)
-
-                        # Run ML on this week's data — same as /intervene
-                        ml_result = await run_in_threadpool(predict, kafka_message)
-
-                        risk_score = ml_result["risk_score"]
-                        risk_level = ml_result["risk_level"]
-                        shap_factors = ml_result["shap_factors"]
-                        top_shap = shap_factors[0] if shap_factors else {}
-
-                        week_event = {
-                            "type": "week",
-                            "week": week_key,
-                            "week_number": len(seen_weeks),
-                            "score": round(risk_score, 4),
-                            "risk_level": risk_level,
-                            "shap_factors": shap_factors[:3],
-                            "top_factor": top_shap.get("feature"),
-                            "top_factor_direction": top_shap.get("direction"),
-                            "top_factor_value": top_shap.get("value"),
-                            "threshold_crossed": risk_score >= 0.70,
-                            "signals": {
-                                "salary_delay_days": kafka_message.get(
-                                    "salary_delay_days", 0
-                                ),
-                                "auto_debit_failures": kafka_message.get(
-                                    "auto_debit_failures", 0
-                                ),
-                                "avg_daily_balance_inr": kafka_message.get(
-                                    "avg_daily_balance_inr", 0
-                                ),
-                                "emi_bounced_flag": kafka_message.get(
-                                    "emi_bounced_flag", False
-                                ),
-                            },
-                        }
-                        yield f"data: {json.dumps(week_event, default=str)}\n\n"
-                        await asyncio.sleep(
-                            2
-                        )  # Delay to ensure week-by-week playback in frontend
-
-                        if risk_score >= 0.70:
-                            intervention_needed = True
-                            last_breach_ml_result = ml_result
-
-                        # If we have reached week 12, end the stream and trigger agent if needed
-                        if len(seen_weeks) >= 12:
-                            if (
-                                intervention_needed
-                                and last_breach_ml_result
-                                and not intervention_sent
-                            ):
-                                intervention_sent = True
-
-                                initial_state: Main_context = {
-                                    "prediction_id": last_breach_ml_result[
-                                        "prediction_id"
-                                    ],
-                                    "observation_week": last_breach_ml_result[
-                                        "observation_week"
-                                    ],
-                                    "total_risk_score": last_breach_ml_result[
-                                        "risk_score"
-                                    ],
-                                    "risk_level": last_breach_ml_result["risk_level"],
-                                    "Shap": last_breach_ml_result["shap_factors"],
-                                    "Customer_profile": last_breach_ml_result[
-                                        "customer_profile"
-                                    ],
-                                    "Stress_context": {},
-                                    "eligible_interventions": [],
-                                    "hard_stop": False,
-                                    "hard_stop_reason": None,
-                                    "Message_Tone": "",
-                                    "Message_content": "",
-                                    "Intervention_method": "",
-                                    "Intervention_justification": "",
-                                    "selected_channel": None,
-                                    "channel_dispatch_result": None,
-                                    "voice_payload": None,
-                                    "voice_result": None,
-                                }
-
-                                try:
-                                    result = await run_in_threadpool(
-                                        graph.invoke, initial_state
-                                    )
-                                    voice_result = result.get("voice_result")
-                                    if not isinstance(voice_result, dict):
-                                        voice_result = {}
-
-                                    call_memory = voice_result.get("call_memory")
-                                    if not isinstance(call_memory, dict):
-                                        call_memory = {}
-
-                                    intervention_method = result.get(
-                                        "Intervention_method"
-                                    )
-                                    message_content = result.get("Message_content")
-                                    if (
-                                        intervention_method == "monitor_only"
-                                        and not message_content
-                                    ):
-                                        message_content = (
-                                            "No intervention required. Monitoring only."
-                                        )
-
-                                    intervention_event = {
-                                        "type": "intervention",
-                                        "week": week_key,
-                                        "week_number": len(seen_weeks),
-                                        "score": round(
-                                            result.get("total_risk_score", 0), 4
-                                        ),
-                                        "risk_level": result.get("risk_level"),
-                                        "method": intervention_method,
-                                        "channel": result.get("selected_channel"),
-                                        "message": message_content,
-                                        "voice_outcome": voice_result.get("outcome"),
-                                        "offer_accepted": call_memory.get(
-                                            "offer_accepted"
-                                        ),
-                                        "hard_stop": result.get("hard_stop"),
-                                        "hard_stop_reason": result.get(
-                                            "hard_stop_reason"
-                                        ),
-                                    }
-                                    yield f"data: {json.dumps(intervention_event, default=str)}\n\n"
-                                    yield f"data: {json.dumps({'type': 'complete', 'triggered': True})}\n\n"
-                                    return
-
-                                except Exception as e:
-                                    yield f"data: {json.dumps({'type': 'error', 'message': f'Agent failed: {str(e)}'})}\n\n"
-                                    return
-                            else:
-                                if not intervention_sent:
-                                    yield f"data: {json.dumps({'type': 'complete', 'triggered': False})}\n\n"
-                                return
-
-                else:
-                    empty_polls += 1
-                    yield f"data: {json.dumps({'type': 'ping'})}\n\n"
-
-                    # If the stream is genuinely finished (no new rows after waiting)
-                    if empty_polls >= MAX_EMPTY_POLLS:
-                        if (
-                            intervention_needed
-                            and last_breach_ml_result
-                            and not intervention_sent
-                        ):
-                            intervention_sent = True
-
-                            initial_state: Main_context = {
-                                "prediction_id": last_breach_ml_result["prediction_id"],
-                                "observation_week": last_breach_ml_result[
-                                    "observation_week"
-                                ],
-                                "total_risk_score": last_breach_ml_result["risk_score"],
-                                "risk_level": last_breach_ml_result["risk_level"],
-                                "Shap": last_breach_ml_result["shap_factors"],
-                                "Customer_profile": last_breach_ml_result[
-                                    "customer_profile"
-                                ],
-                                "Stress_context": {},
-                                "eligible_interventions": [],
-                                "hard_stop": False,
-                                "hard_stop_reason": None,
-                                "Message_Tone": "",
-                                "Message_content": "",
-                                "Intervention_method": "",
-                                "Intervention_justification": "",
-                                "selected_channel": None,
-                                "channel_dispatch_result": None,
-                                "voice_payload": None,
-                                "voice_result": None,
-                            }
-
-                            try:
-                                result = await run_in_threadpool(
-                                    graph.invoke, initial_state
-                                )
-                                voice_result = result.get("voice_result")
-                                if not isinstance(voice_result, dict):
-                                    voice_result = {}
-
-                                call_memory = voice_result.get("call_memory")
-                                if not isinstance(call_memory, dict):
-                                    call_memory = {}
-
-                                intervention_method = result.get("Intervention_method")
-                                message_content = result.get("Message_content")
-                                if (
-                                    intervention_method == "monitor_only"
-                                    and not message_content
-                                ):
-                                    message_content = (
-                                        "No intervention required. Monitoring only."
-                                    )
-
-                                intervention_event = {
-                                    "type": "intervention",
-                                    "week": len(seen_weeks),
-                                    "week_number": len(seen_weeks),
-                                    "score": round(
-                                        result.get("total_risk_score", 0), 4
-                                    ),
-                                    "risk_level": result.get("risk_level"),
-                                    "method": intervention_method,
-                                    "channel": result.get("selected_channel"),
-                                    "message": message_content,
-                                    "voice_outcome": voice_result.get("outcome"),
-                                    "offer_accepted": call_memory.get("offer_accepted"),
-                                    "hard_stop": result.get("hard_stop"),
-                                    "hard_stop_reason": result.get("hard_stop_reason"),
-                                }
-                                yield f"data: {json.dumps(intervention_event, default=str)}\n\n"
-                                yield f"data: {json.dumps({'type': 'complete', 'triggered': True})}\n\n"
-                                return
-
-                            except Exception as e:
-                                yield f"data: {json.dumps({'type': 'error', 'message': f'Agent failed: {str(e)}'})}\n\n"
-                                return
-                        else:
-                            yield f"data: {json.dumps({'type': 'complete', 'triggered': False})}\n\n"
-                            return
-
+                week_event = {
+                    "type": "week",
+                    "week": week_key,
+                    "week_number": len(seen_weeks),
+                    "score": round(risk_score, 4),
+                    "lgb_p": round(ml_result.get("lgb_p", risk_score), 4),
+                    "gru_p": round(ml_result.get("gru_p", risk_score), 4),
+                    "risk_level": risk_level,
+                    "shap_factors": shap_factors[:3],
+                    "top_factor": top_shap.get("feature"),
+                    "top_factor_direction": top_shap.get("direction"),
+                    "top_factor_value": top_shap.get("value"),
+                    "threshold_crossed": risk_score >= 0.70,
+                    "signals": {
+                        "salary_delay_days": kafka_message.get("salary_delay_days", 0),
+                        "auto_debit_failures": kafka_message.get(
+                            "auto_debit_failures", 0
+                        ),
+                        "avg_daily_balance_inr": kafka_message.get(
+                            "avg_daily_balance_inr", 0
+                        ),
+                        "emi_bounced_flag": kafka_message.get(
+                            "emi_bounced_flag", False
+                        ),
+                    },
+                }
+                yield f"data: {json.dumps(week_event, default=str)}\n\n"
                 await asyncio.sleep(2)
+
+                if risk_score >= 0.70:
+                    intervention_needed = True
+                    last_breach_ml_result = ml_result
+                
+                # Yield a periodic ping to keep connection alive
+                yield f"data: {json.dumps({'type': 'ping'})}\n\n"
+
+            if intervention_needed and last_breach_ml_result:
+                initial_state: Main_context = {
+                    "prediction_id": last_breach_ml_result["prediction_id"],
+                    "observation_week": last_breach_ml_result["observation_week"],
+                    "total_risk_score": last_breach_ml_result["risk_score"],
+                    "risk_level": last_breach_ml_result["risk_level"],
+                    "Shap": last_breach_ml_result["shap_factors"],
+                    "Customer_profile": last_breach_ml_result["customer_profile"],
+                    "Stress_context": {},
+                    "eligible_interventions": [],
+                    "hard_stop": False,
+                    "hard_stop_reason": None,
+                    "Message_Tone": "",
+                    "Message_content": "",
+                    "Intervention_method": "",
+                    "Intervention_justification": "",
+                    "selected_channel": None,
+                    "channel_dispatch_result": None,
+                    "voice_payload": None,
+                    "voice_result": None,
+                }
+
+                try:
+                    result = await run_in_threadpool(graph.invoke, initial_state)
+                    voice_result = result.get("voice_result") or {}
+                    call_memory = voice_result.get("call_memory") or {}
+                    intervention_method = result.get("Intervention_method")
+                    message_content = result.get("Message_content")
+                    if intervention_method == "monitor_only" and not message_content:
+                        message_content = "No intervention required. Monitoring only."
+
+                    intervention_event = {
+                        "type": "intervention",
+                        "week": last_breach_ml_result["observation_week"],
+                        "week_number": len(seen_weeks),
+                        "score": round(result.get("total_risk_score", 0), 4),
+                        "risk_level": result.get("risk_level"),
+                        "method": intervention_method,
+                        "channel": result.get("selected_channel"),
+                        "message": message_content,
+                        "voice_outcome": voice_result.get("outcome"),
+                        "offer_accepted": call_memory.get("offer_accepted"),
+                        "hard_stop": result.get("hard_stop"),
+                        "hard_stop_reason": result.get("hard_stop_reason"),
+                    }
+                    yield f"data: {json.dumps(intervention_event, default=str)}\n\n"
+                    yield f"data: {json.dumps({'type': 'complete', 'triggered': True})}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'type': 'error', 'message': f'Agent failed: {str(e)}'})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'complete', 'triggered': False})}\n\n"
 
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"

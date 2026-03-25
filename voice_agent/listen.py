@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 SAMPLE_RATE = 16000
 CHANNELS = 1
 SILENCE_THRESHOLD = 0.45  # Adjusted for better voice detection
-SILENCE_DURATION = 2  # Seconds of silence before stopping
+SILENCE_DURATION = 1  # Seconds of silence before stopping
 MIN_SPEECH_CHUNKS = 2  # 2 consecutive chunks to confirm speech started
 PRE_ROLL_CHUNKS = 5  # 500ms pre-roll to catch beginning of words
 

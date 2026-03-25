@@ -1,33 +1,47 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
-import type { CustomerSummary } from '../types'
+import type { CustomerDetail, VoiceCustomer } from '../types'
 import {
     User,
     ChevronRight,
     ArrowRightCircle,
     Activity,
     ShieldAlert,
-    Search
+    Search,
+    Phone,
+    Users
 } from 'lucide-react'
 
+type TabType = 'all' | 'voice'
+
 export default function PortfolioInsights() {
-    const [customers, setCustomers] = useState<CustomerSummary[]>([])
+    const [customers, setCustomers] = useState<CustomerDetail[]>([])
+    const [voiceCustomers, setVoiceCustomers] = useState<VoiceCustomer[]>([])
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
     const [riskFilter, setRiskFilter] = useState<'All' | 'High' | 'Medium' | 'Low'>('All')
+    const [activeTab, setActiveTab] = useState<TabType>('all')
     const navigate = useNavigate()
 
     useEffect(() => {
-        api.getCustomers()
-            .then(setCustomers)
+        Promise.all([
+            api.getCustomersAll(),
+            api.getCustomersVoice()
+        ])
+            .then(([all, voice]) => {
+                setCustomers(all)
+                setVoiceCustomers(voice)
+            })
             .catch(console.error)
             .finally(() => setLoading(false))
     }, [])
 
-    const filtered = customers.filter(c => {
+    const displayedCustomers = activeTab === 'all' ? customers : voiceCustomers
+
+    const filtered = displayedCustomers.filter(c => {
         const matchesSearch = c.customer_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.product_type.toLowerCase().includes(searchTerm.toLowerCase());
+            c.product_type?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesRisk = riskFilter === 'All' || c.risk_level === riskFilter;
         return matchesSearch && matchesRisk;
     })
@@ -68,17 +82,52 @@ export default function PortfolioInsights() {
                     </div>
                 </div>
 
-                {/* Risk Filter Bar */}
-                <div className="flex items-center gap-3 p-2 bg-zinc-50 rounded-2xl border border-zinc-100 w-fit">
-                    {(['All', 'High', 'Medium', 'Low'] as const).map((level) => (
+                {/* Tabs + Risk Filter Bar */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+                    {/* Tab Buttons */}
+                    <div className="flex items-center gap-2 p-2 bg-zinc-50 rounded-2xl border border-zinc-100">
                         <button
-                            key={level}
-                            onClick={() => setRiskFilter(level)}
-                            className={`px-6 py-3 rounded-[1.25rem] text-[10px] font-black uppercase tracking-widest transition-all ${riskFilter === level ? 'bg-zinc-950 text-white shadow-xl shadow-zinc-900/10' : 'text-zinc-400 hover:text-zinc-950'}`}
+                            onClick={() => setActiveTab('all')}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-[1.25rem] text-[10px] font-black uppercase tracking-widest transition-all ${
+                                activeTab === 'all' 
+                                    ? 'bg-zinc-950 text-white shadow-xl shadow-zinc-900/10' 
+                                    : 'text-zinc-400 hover:text-zinc-950'
+                            }`}
                         >
-                            {level}
+                            <Users size={14} />
+                            All Customers
+                            <span className={`ml-1 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'all' ? 'bg-white/20' : 'bg-zinc-200'}`}>
+                                {customers.length}
+                            </span>
                         </button>
-                    ))}
+                        <button
+                            onClick={() => setActiveTab('voice')}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-[1.25rem] text-[10px] font-black uppercase tracking-widest transition-all ${
+                                activeTab === 'voice' 
+                                    ? 'bg-zinc-950 text-white shadow-xl shadow-zinc-900/10' 
+                                    : 'text-zinc-400 hover:text-zinc-950'
+                            }`}
+                        >
+                            <Phone size={14} />
+                            Voice Interventions
+                            <span className={`ml-1 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'voice' ? 'bg-white/20' : 'bg-zinc-200'}`}>
+                                {voiceCustomers.length}
+                            </span>
+                        </button>
+                    </div>
+
+                    {/* Risk Filter */}
+                    <div className="flex items-center gap-3 p-2 bg-zinc-50 rounded-2xl border border-zinc-100 w-fit">
+                        {(['All', 'High', 'Medium', 'Low'] as const).map((level) => (
+                            <button
+                                key={level}
+                                onClick={() => setRiskFilter(level)}
+                                className={`px-6 py-3 rounded-[1.25rem] text-[10px] font-black uppercase tracking-widest transition-all ${riskFilter === level ? 'bg-zinc-950 text-white shadow-xl shadow-zinc-900/10' : 'text-zinc-400 hover:text-zinc-950'}`}
+                            >
+                                {level}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
@@ -99,6 +148,15 @@ export default function PortfolioInsights() {
                                 key={c.customer_id}
                                 className={`group relative bg-white rounded-[3rem] p-10 border transition-all duration-700 hover:-translate-y-2 hover:shadow-[0_50px_100px_-20px_rgba(0,0,0,0.1)] ${isHigh ? 'border-red-100 shadow-xl shadow-red-500/5' : 'border-zinc-100 shadow-sm'}`}
                             >
+                                {/* Channel Badge for Voice Tab */}
+                                {activeTab === 'voice' && (c as VoiceCustomer).intervention_method && (
+                                    <div className="absolute top-6 right-6">
+                                        <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                            {(c as VoiceCustomer).intervention_method?.replace('_', ' ')}
+                                        </span>
+                                    </div>
+                                )}
+
                                 {/* Card Header Area */}
                                 <div className="flex justify-between items-start mb-12">
                                     <div className="flex items-center gap-5">

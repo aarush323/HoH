@@ -5,10 +5,7 @@ import type { AuditRecord } from '../types'
 import {
     MessageSquare,
     Phone,
-    ShieldCheck,
     ChevronRight,
-    ArrowUpRight,
-    User,
     CheckCircle2,
     XCircle,
     Activity

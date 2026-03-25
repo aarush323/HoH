@@ -225,7 +225,7 @@ def create_tables_if_not_exist():
                 customer_id     VARCHAR(20) REFERENCES customers(customer_id),
                 prediction_id   BIGINT REFERENCES model_predictions(id),
                 narrative       TEXT,
-                stress_type     VARCHAR(50),
+                stress_type     VARCHAR(100),
                 severity        VARCHAR(20),
                 recommended_action TEXT,
                 created_at      TIMESTAMPTZ DEFAULT NOW()
@@ -251,7 +251,7 @@ def create_tables_if_not_exist():
                 hard_stop                   BOOLEAN DEFAULT FALSE,
                 hard_stop_reason            TEXT,
                 status                      VARCHAR(20),
-                outcome                     VARCHAR(20),
+                outcome                     VARCHAR(30),
                 created_at                  TIMESTAMPTZ DEFAULT NOW(),
                 resolved_at                 TIMESTAMPTZ,
                 UNIQUE (customer_id, observation_week)
@@ -314,6 +314,8 @@ def create_tables_if_not_exist():
             "ALTER TABLE weekly_features ADD COLUMN IF NOT EXISTS shock_type VARCHAR(64);",
             "ALTER TABLE stress_context ADD COLUMN IF NOT EXISTS recommended_action TEXT;",
             "ALTER TABLE interventions ALTER COLUMN message_tone TYPE VARCHAR(100);",
+            "ALTER TABLE interventions ALTER COLUMN outcome TYPE VARCHAR(30);",
+            "ALTER TABLE stress_context ALTER COLUMN stress_type TYPE VARCHAR(100);",
         ]
 
         for stmt in alter_statements:

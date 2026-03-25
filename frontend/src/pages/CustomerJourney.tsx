@@ -65,18 +65,42 @@ export default function CustomerJourney() {
     const navigate = useNavigate()
     const [data, setData] = useState<CustomerDetailOverview | null>(null)
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         if (!id) return
+        setLoading(true)
+        setError(null)
         api.getCustomerDetail(id)
-            .then(setData)
-            .catch(console.error)
+            .then(res => {
+                if (!res) throw new Error('Customer data not found')
+                setData(res)
+            })
+            .catch(err => {
+                console.error(err)
+                setError(err.message || 'Failed to load customer details')
+            })
             .finally(() => setLoading(false))
     }, [id])
 
-    if (loading || !data) return (
+    if (loading) return (
         <div className="flex items-center justify-center min-h-screen bg-[#fafafa]">
             <div className="w-12 h-12 border-2 border-zinc-100 border-t-blue-600 rounded-full animate-spin" />
+        </div>
+    )
+
+    if (error || !data) return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-[#fafafa] gap-6">
+            <AlertCircle size={48} className="text-red-500" />
+            <div className="text-xl font-black uppercase tracking-widest text-zinc-400">
+                {error || 'Customer not found'}
+            </div>
+            <button
+                onClick={() => navigate('/portfolio')}
+                className="px-8 py-3 bg-zinc-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest"
+            >
+                Return to Portfolio
+            </button>
         </div>
     )
 
@@ -162,13 +186,13 @@ export default function CustomerJourney() {
                     <div className="lg:col-span-6 grid grid-cols-1 md:grid-cols-2 gap-8">
                         <ScoreNode
                             label="Sequential Sentiment"
-                            score={score.gru_p!}
+                            score={score.gru_p ?? 0}
                             agent="GRU-V3"
                             colorClass="text-indigo-500 border-indigo-500/20 bg-indigo-50/50"
                         />
                         <ScoreNode
                             label="Structural Weighting"
-                            score={score.lgb_p!}
+                            score={score.lgb_p ?? 0}
                             agent="LGBM-V4"
                             colorClass="text-blue-500 border-blue-500/20 bg-blue-50/50"
                         />

@@ -1,10 +1,13 @@
 import type {
     CustomerSummary,
+    CustomerDetail,
+    VoiceCustomer,
     CustomerFullProfile,
     ScoreResponse,
     AuditRecord,
     InterveneResponse,
     Rules,
+    DashboardStats,
 } from '../types';
 
 const BASE = '/api';
@@ -27,6 +30,9 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 
 export const api = {
     getCustomers: () => get<CustomerSummary[]>('/customers'),
+    getCustomersAll: () => get<CustomerDetail[]>('/customers/all'),
+    getCustomersVoice: () => get<VoiceCustomer[]>('/customers/voice'),
+    getDashboardStats: () => get<DashboardStats>('/dashboard/stats'),
     getCustomer: (id: string) => get<CustomerFullProfile>(`/customers/${id}`),
     getScore: (id: string) => get<ScoreResponse>(`/score/${id}`),
     intervene: (id: string) => post<InterveneResponse>(`/intervene/${id}`),
