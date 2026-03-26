@@ -58,7 +58,7 @@ def get_all_customers():
 
 
 @app.get("/customers/voice")
-def get_voice_customers():
+def list_voice_customers():
     """Returns customers who received voice interventions."""
     return get_voice_customers()
 
@@ -414,7 +414,7 @@ async def journey_stream(customer_id: str):
                 if risk_score >= 0.70:
                     intervention_needed = True
                     last_breach_ml_result = ml_result
-                
+
                 # Yield a periodic ping to keep connection alive
                 yield f"data: {json.dumps({'type': 'ping'})}\n\n"
 
