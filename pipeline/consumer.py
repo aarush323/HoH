@@ -10,6 +10,7 @@ from db.postgres import get_connection
 from db.cassandra_component import get_session
 from sqlalchemy import text
 import httpx
+from db.redis_client import publish_event
 
 KAFKA_TOPIC = "customer-weekly-observations"
 KAFKA_BROKER = "127.0.0.1:9093"
@@ -92,6 +93,43 @@ def fire_intervention(record: dict):
         print(f"[Trigger] {record['customer_id']} → HTTP {response.status_code}")
     except Exception as e:
         print(f"[Trigger] Failed for {record['customer_id']}: {e}")
+
+
+def push_event(record: dict, stage: str, triggered: bool | None = None, risk_score: float | None = None, agent_result: dict | None = None):
+    """Helper to push granular events to SSE."""
+    event = {
+        "customer_id": record["customer_id"],
+        "stage": stage,
+    }
+    if stage != "CUSTOMER_DONE":
+        event["week"] = record.get("observation_week")
+    
+    if triggered is not None:
+        event["triggered"] = triggered
+    
+    if risk_score is not None:
+        event["risk_score"] = risk_score
+
+    if agent_result is not None:
+        event["agent_result"] = agent_result
+        
+    if stage in ["INGEST", "INGEST_TRIGGERED"]:
+        event["balance"] = float(record.get("avg_daily_balance_inr", 0))
+        event["salary_delay"] = int(record.get("salary_delay_days", 0))
+        event["archetype"] = record.get("customer_segment", "Unknown")
+        
+    if stage == "OUTREACH":
+        if risk_score is not None:
+            if risk_score >= 0.7:
+                event["global_risk"] = "HIGH"
+            elif risk_score >= 0.4:
+                event["global_risk"] = "MEDIUM"
+            else:
+                event["global_risk"] = "LOW"
+        else:
+            event["global_risk"] = "LOW"
+            
+    publish_event(event)
 
 
 def insert_into_postgres(record: dict):
@@ -313,9 +351,21 @@ def run_consumer():
 
         print(f"[Consumer] Listening on topic '{KAFKA_TOPIC}'...\n")
 
+        last_customer_id = None
+
         for message in cons:
             record = message.value
             customer_id = record["customer_id"]
+
+            if last_customer_id and customer_id != last_customer_id:
+                push_event({"customer_id": last_customer_id}, "CUSTOMER_DONE")
+            last_customer_id = customer_id
+
+            # Check rules FIRST
+            triggered = should_trigger(record)
+            
+            # Step 1: INGEST
+            push_event(record, "INGEST", triggered=triggered)
 
             print(
                 f"customer={customer_id} | "
@@ -326,11 +376,10 @@ def run_consumer():
                 f"default_risk={record['will_default_next_2_4_weeks']}"
             )
 
-            # Check rules FIRST - decide whether to trigger ML + agents
-            triggered = should_trigger(record)
             print(f"[Consumer] Rules check: triggered={triggered}")
 
             if triggered:
+                push_event(record, "INGEST_TRIGGERED", triggered=True)
                 # Route: ingest → predict → intervene
                 try:
                     ingest_resp = httpx.post(
@@ -348,9 +397,11 @@ def run_consumer():
                         f"{API_BASE}/predict", json=record, timeout=60.0
                     )
                     ml_result = predict_resp.json()
+                    risk_score = ml_result.get("risk_score")
                     print(
-                        f"[Consumer] ML completed: {customer_id} → risk={ml_result.get('risk_score')}"
+                        f"[Consumer] ML completed: {customer_id} → risk={risk_score}"
                     )
+                    push_event(record, "SCORE", risk_score=risk_score, triggered=True)
                 except Exception as e:
                     print(f"[Consumer Error] Predict failed for {customer_id}: {e}")
                     continue
@@ -361,13 +412,18 @@ def run_consumer():
                         json={"kafka_message": record, "ml_result": ml_result},
                         timeout=120.0,
                     )
+                    agent_result = intervene_resp.json()
                     print(
                         f"[Consumer] Agents completed: {customer_id} → {intervene_resp.status_code}"
                     )
+                    # Push result in ANALYSE and OUTREACH stages
+                    push_event(record, "ANALYSE", risk_score=risk_score, agent_result=agent_result, triggered=True)
+                    push_event(record, "OUTREACH", risk_score=risk_score, agent_result=agent_result, triggered=True)
                 except Exception as e:
                     print(f"[Consumer Error] Intervene failed for {customer_id}: {e}")
             else:
                 # Route: ingest only (DB persistence, no ML, no agents)
+                push_event(record, "SKIPPED", triggered=False)
                 try:
                     ingest_resp = httpx.post(
                         f"{API_BASE}/ingest", json=record, timeout=60.0

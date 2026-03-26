@@ -169,7 +169,14 @@ async def intervene(customer_id: str, request: Request):
     try:
         result = graph.invoke(initial_state)
         print("[Intervene] Agents completed successfully")
-        return {"status": "success", "customer_id": customer_id}
+        return {
+            "status": "success",
+            "customer_id": customer_id,
+            "intervention_method": result.get("Intervention_method"),
+            "message_content": result.get("Message_content"),
+            "selected_channel": result.get("selected_channel"),
+            "total_risk_score": result.get("total_risk_score")
+        }
     except Exception as e:
         import traceback
 
@@ -307,15 +314,27 @@ async def stream_risk():
 
                 if message and message["type"] == "message":
                     try:
-                        total_events = await run_in_threadpool(get_total_events)
-                        customers = await run_in_threadpool(get_all_customers_with_risk)
-                        payload = {"customers": customers, "total_events": total_events}
+                        data = message["data"]
+                        # Check if data is a JSON dict (granular event) or just "refresh"
+                        is_granular = False
+                        try:
+                            decoded = json.loads(data)
+                            if isinstance(decoded, dict):
+                                is_granular = True
+                                yield f"data: {data}\n\n"
+                        except:
+                            pass
 
-                        if payload != last_data:
-                            yield f"data: {json.dumps(payload, default=str)}\n\n"
-                            last_data = payload
+                        if not is_granular:
+                            total_events = await run_in_threadpool(get_total_events)
+                            customers = await run_in_threadpool(get_all_customers_with_risk)
+                            payload = {"customers": customers, "total_events": total_events}
+
+                            if payload != last_data:
+                                yield f"data: {json.dumps(payload, default=str)}\n\n"
+                                last_data = payload
                     except Exception as e:
-                        print(f"[SSE] DB query error: {e}")
+                        print(f"[SSE] Processing error: {e}")
                 else:
                     yield f"data: {json.dumps({'type': 'ping'})}\n\n"
 

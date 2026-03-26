@@ -95,3 +95,8 @@ def subscribe_updates():
     pubsub = client.pubsub()
     pubsub.subscribe(CHANNEL_SSE)
     return pubsub
+
+
+def publish_event(event: dict):
+    """Publish a granular dict event to the SSE channel."""
+    client.publish(CHANNEL_SSE, json.dumps(event))
