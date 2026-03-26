@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useLiveFeed } from '../context/LiveFeedContext'
 import { api } from '../api/client'
 import {
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react'
 
 export default function IngestionStream() {
+    const navigate = useNavigate()
     const { customers, connected, eventCount } = useLiveFeed()
     const [isSimulating, setIsSimulating] = useState(false)
     const [highRiskCount, setHighRiskCount] = useState(0)
@@ -194,7 +196,7 @@ export default function IngestionStream() {
                                     </div>
 
                                     <button
-                                        onClick={() => window.location.href = `/customer/${c.customer_id}`}
+                                        onClick={() => navigate(`/customer/${c.customer_id}`)}
                                         className="w-16 h-16 bg-zinc-50 rounded-[1.75rem] flex items-center justify-center text-zinc-400 hover:bg-[#004ac6] hover:text-white transition-all hover:scale-110 active:scale-95 border border-zinc-100 group/btn shadow-sm"
                                     >
                                         <ArrowUpRight size={26} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />

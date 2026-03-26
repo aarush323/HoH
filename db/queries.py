@@ -462,7 +462,19 @@ def get_all_customers_tabular() -> list[dict]:
                  ORDER BY i.created_at DESC LIMIT 1) as last_outcome,
                 (SELECT i.status FROM interventions i 
                  WHERE i.customer_id = c.customer_id 
-                 ORDER BY i.created_at DESC LIMIT 1) as last_status
+                 ORDER BY i.created_at DESC LIMIT 1) as last_status,
+                (SELECT sc.stress_type FROM stress_context sc 
+                 WHERE sc.customer_id = c.customer_id 
+                 ORDER BY sc.created_at DESC LIMIT 1) as stress_type,
+                (SELECT sc.severity FROM stress_context sc 
+                 WHERE sc.customer_id = c.customer_id 
+                 ORDER BY sc.created_at DESC LIMIT 1) as severity,
+                (SELECT sc.narrative FROM stress_context sc 
+                 WHERE sc.customer_id = c.customer_id 
+                 ORDER BY sc.created_at DESC LIMIT 1) as stress_narrative,
+                (SELECT sc.recommended_action FROM stress_context sc 
+                 WHERE sc.customer_id = c.customer_id 
+                 ORDER BY sc.created_at DESC LIMIT 1) as recommended_action
             FROM customers c
             LEFT JOIN model_predictions mp ON c.customer_id = mp.customer_id
             LEFT JOIN weekly_features wf ON c.customer_id = wf.customer_id 
@@ -503,6 +515,12 @@ def get_all_customers_tabular() -> list[dict]:
                 "last_channel": r["last_channel"],
                 "last_outcome": r["last_outcome"],
                 "last_status": r["last_status"],
+                "analysis": {
+                    "stress_type": r["stress_type"],
+                    "severity": r["severity"],
+                    "narrative": r["stress_narrative"],
+                    "recommended_action": r["recommended_action"],
+                },
             }
         )
 
@@ -524,7 +542,19 @@ def get_voice_customers() -> list[dict]:
                 wf.salary_delay_days, wf.auto_debit_failures,
                 wf.savings_drawdown_pct, wf.utility_payment_delay_days,
                 i.intervention_method, i.outcome, i.status, i.created_at as intervention_date,
-                (SELECT COUNT(*) > 0 FROM stress_context sc WHERE sc.customer_id = c.customer_id) as has_analysis
+                (SELECT COUNT(*) > 0 FROM stress_context sc WHERE sc.customer_id = c.customer_id) as has_analysis,
+                (SELECT sc.stress_type FROM stress_context sc 
+                 WHERE sc.customer_id = c.customer_id 
+                 ORDER BY sc.created_at DESC LIMIT 1) as stress_type,
+                (SELECT sc.severity FROM stress_context sc 
+                 WHERE sc.customer_id = c.customer_id 
+                 ORDER BY sc.created_at DESC LIMIT 1) as severity,
+                (SELECT sc.narrative FROM stress_context sc 
+                 WHERE sc.customer_id = c.customer_id 
+                 ORDER BY sc.created_at DESC LIMIT 1) as stress_narrative,
+                (SELECT sc.recommended_action FROM stress_context sc 
+                 WHERE sc.customer_id = c.customer_id 
+                 ORDER BY sc.created_at DESC LIMIT 1) as recommended_action
             FROM customers c
             JOIN interventions i ON c.customer_id = i.customer_id
             LEFT JOIN model_predictions mp ON c.customer_id = mp.customer_id
@@ -568,6 +598,12 @@ def get_voice_customers() -> list[dict]:
                     "auto_debit_failures": int(r["auto_debit_failures"] or 0),
                     "savings_drawdown": float(r["savings_drawdown_pct"] or 0.0),
                     "utility_delay": int(r["utility_payment_delay_days"] or 0),
+                },
+                "analysis": {
+                    "stress_type": r["stress_type"],
+                    "severity": r["severity"],
+                    "narrative": r["stress_narrative"],
+                    "recommended_action": r["recommended_action"],
                 },
             }
         )

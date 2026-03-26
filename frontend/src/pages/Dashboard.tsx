@@ -60,16 +60,16 @@ export default function Dashboard() {
 
     // Channel mix data
     const channelData = [
-        { name: 'Voice', value: stats?.channel_mix.voice || 0, color: '#6366f1' },
-        { name: 'Email', value: stats?.channel_mix.email || 0, color: '#71717a' },
-        { name: 'SMS', value: stats?.channel_mix.sms || 0, color: '#a1a1aa' }
+        { name: 'Voice', value: stats?.channel_mix?.voice || 0, color: '#6366f1' },
+        { name: 'Email', value: stats?.channel_mix?.email || 0, color: '#71717a' },
+        { name: 'SMS', value: stats?.channel_mix?.sms || 0, color: '#a1a1aa' }
     ]
 
     // Product risk data
     const productData = [
-        { name: 'Home Loan', atRisk: stats?.risk_by_product.home_loan.at_risk || 0 },
-        { name: 'Credit Card', atRisk: stats?.risk_by_product.credit_card.at_risk || 0 },
-        { name: 'Personal Loan', atRisk: stats?.risk_by_product.personal_loan.at_risk || 0 }
+        { name: 'Home Loan', atRisk: stats?.risk_by_product?.home_loan?.at_risk || 0 },
+        { name: 'Credit Card', atRisk: stats?.risk_by_product?.credit_card?.at_risk || 0 },
+        { name: 'Personal Loan', atRisk: stats?.risk_by_product?.personal_loan?.at_risk || 0 }
     ]
 
     const activeWatchlist = displayedCustomers.filter(c => c.risk_level === 'High' || c.risk_level === 'Medium')
@@ -357,6 +357,27 @@ export default function Dashboard() {
                                             <div className="text-[9px] text-indigo-400 mt-1 uppercase tracking-wider">
                                                 {(c as VoiceCustomer).intervention_method?.replace('_', ' ')}
                                             </div>
+                                        )}
+                                        {c.analysis && (
+                                            <>
+                                                <div className="flex flex-wrap gap-2 mt-2">
+                                                    <span className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded-lg text-[9px] font-bold uppercase text-zinc-400">
+                                                        {c.analysis.stress_type}
+                                                    </span>
+                                                    <span className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase ${
+                                                        c.analysis.severity === 'high' || c.analysis.severity === 'very high' ? 'bg-red-500/20 text-red-400' : 
+                                                        c.analysis.severity === 'medium' ? 'bg-amber-500/20 text-amber-400' :
+                                                        'bg-zinc-700 text-zinc-400'
+                                                    }`}>
+                                                        {c.analysis.severity}
+                                                    </span>
+                                                </div>
+                                                {c.analysis.narrative && (
+                                                    <div className="text-[9px] text-zinc-500 mt-2 italic line-clamp-1">
+                                                        "{c.analysis.narrative}"
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </div>

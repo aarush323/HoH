@@ -205,6 +205,29 @@ export default function PortfolioInsights() {
                                     </div>
                                 </div>
 
+                                {/* Analysis Badges */}
+                                {c.analysis && (
+                                    <div className="mb-8">
+                                        <div className="flex flex-wrap gap-2 mb-3">
+                                            <span className="px-3 py-1 bg-zinc-50 border border-zinc-200 rounded-lg text-[10px] font-bold uppercase text-zinc-600">
+                                                {c.analysis.stress_type}
+                                            </span>
+                                            <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase ${
+                                                c.analysis.severity === 'high' || c.analysis.severity === 'very high' ? 'bg-red-50 text-red-600 border border-red-100' : 
+                                                c.analysis.severity === 'medium' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                                                'bg-zinc-50 text-zinc-500 border border-zinc-100'
+                                            }`}>
+                                                {c.analysis.severity}
+                                            </span>
+                                        </div>
+                                        {c.analysis.narrative && (
+                                            <div className="text-[11px] text-zinc-500 italic leading-relaxed">
+                                                "{c.analysis.narrative}"
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {/* Status Statement */}
                                 <div className="mb-12 h-12 flex items-center">
                                     <p className={`text-[11px] font-bold leading-relaxed ${isHigh ? 'text-red-500' : 'text-zinc-400'}`}>

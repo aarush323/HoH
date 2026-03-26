@@ -156,6 +156,12 @@ export interface CustomerDetail extends CustomerSummary {
     last_channel: string | null;
     last_outcome: string | null;
     last_status: string | null;
+    analysis?: {
+        stress_type: string | null;
+        severity: string | null;
+        narrative: string | null;
+        recommended_action: string | null;
+    };
 }
 
 // Voice customer with intervention details

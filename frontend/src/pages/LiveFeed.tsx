@@ -54,7 +54,7 @@ export default function LiveFeed() {
                         <BarChart3 size={16} className="text-zinc-600" />
                         <div>
                             <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">MONITORING</div>
-                            <div className="text-xs font-black text-zinc-900 uppercase tracking-widest">321 ACCOUNTS</div>
+                            <div className="text-xs font-black text-zinc-900 uppercase tracking-widest">{customers.length} ACCOUNTS</div>
                         </div>
                     </div>
 
