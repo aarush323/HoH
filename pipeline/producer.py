@@ -12,7 +12,7 @@ KAFKA_TOPIC = "customer-weekly-observations"
 KAFKA_BROKER = "127.0.0.1:9093"
 CSV_FILE = "pipeline/pre_delinquency_dataset.csv"
 DELAY_SECONDS = 2.0
-DEMO_CUSTOMERS = {"C00002","C00011","C00012"}
+DEMO_CUSTOMERS = {"C00030","C00011","C00946"}
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
@@ -137,6 +137,7 @@ def run_producer(limit_customers=None):
                 "savings_drawdown_velocity": float(row["savings_drawdown_velocity"]),
                 "external_shock_flag": bool(int(row["external_shock_flag"])),
                 "shock_type": row["shock_type"],
+                "loan_amount": float(row["emi_amount_inr"]) * 36, #  calculation for demo
             }
             producer.send(KAFKA_TOPIC, value=message)
             _mark_sent(customer_id, week)

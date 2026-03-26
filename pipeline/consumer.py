@@ -116,9 +116,8 @@ def insert_into_postgres(record: dict):
                 monthly_income_inr, emi_amount_inr, emi_due_this_week,
                 available_funds_inr, emi_paid_flag, emi_bounced_flag,
                 missed_emi_count_rolling, balance_velocity,
-                salary_delay_delta, discretionary_velocity,
-                upi_lending_delta, savings_drawdown_velocity,
-                external_shock_flag, shock_type
+                salary_delay_delta, discretionary_velocity, upi_lending_delta,
+                savings_drawdown_velocity, external_shock_flag, shock_type, loan_amount
             ) VALUES (
                 :customer_id, :observation_week, :age, :customer_segment,
                 :geography_zone, :product_type, :account_vintage_months,
@@ -139,7 +138,7 @@ def insert_into_postgres(record: dict):
                 :missed_emi_count_rolling, :balance_velocity,
                 :salary_delay_delta, :discretionary_velocity,
                 :upi_lending_delta, :savings_drawdown_velocity,
-                :external_shock_flag, :shock_type
+                :external_shock_flag, :shock_type, :loan_amount
             )
             ON CONFLICT (customer_id, observation_week) DO NOTHING
         """),
@@ -150,13 +149,13 @@ def insert_into_postgres(record: dict):
             text("""
             INSERT INTO customers (
                 customer_id, age, customer_segment, geography_zone,
-                product_type, account_vintage_months, emi_to_income_ratio
+                product_type, account_vintage_months, emi_to_income_ratio, loan_amount
             ) VALUES (
                 :customer_id, :age, :customer_segment, :geography_zone,
-                :product_type, :account_vintage_months, :emi_to_income_ratio
+                :product_type, :account_vintage_months, :emi_to_income_ratio, :loan_amount
             )
             ON CONFLICT (customer_id) DO UPDATE
-                SET updated_at = NOW()
+                SET loan_amount = EXCLUDED.loan_amount, updated_at = NOW()
         """),
             record,
         )
@@ -181,7 +180,7 @@ def insert_into_postgres(record: dict):
                 missed_emi_count_rolling, balance_velocity,
                 salary_delay_delta, discretionary_velocity,
                 upi_lending_delta, savings_drawdown_velocity,
-                external_shock_flag, shock_type
+                external_shock_flag, shock_type, loan_amount
             ) VALUES (
                 :customer_id, :observation_week, :salary_delay_days,
                 :salary_drop_pct, :avg_daily_balance_inr, :balance_trend_pct,
@@ -200,7 +199,7 @@ def insert_into_postgres(record: dict):
                 :missed_emi_count_rolling, :balance_velocity,
                 :salary_delay_delta, :discretionary_velocity,
                 :upi_lending_delta, :savings_drawdown_velocity,
-                :external_shock_flag, :shock_type
+                :external_shock_flag, :shock_type, :loan_amount
             )
             ON CONFLICT (customer_id, observation_week) DO NOTHING
         """),

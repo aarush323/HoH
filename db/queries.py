@@ -649,6 +649,20 @@ def get_dashboard_stats() -> dict:
         """)
         ).fetchone()
 
+        # Get predictive stress indicators (latest for each customer)
+        stress_indicators = conn.execute(
+            text("""
+            SELECT 
+                COALESCE(SUM(financial_stress_queries), 0) as total_stress_queries,
+                COALESCE(AVG(salary_delay_days), 0) as avg_salary_delay
+            FROM (
+                SELECT DISTINCT ON (customer_id) financial_stress_queries, salary_delay_days
+                FROM weekly_features
+                ORDER BY customer_id, observation_week DESC
+            ) t
+        """)
+        ).fetchone()
+
         # Get product-based risk
         product_stats = conn.execute(
             text("""
@@ -688,6 +702,7 @@ def get_dashboard_stats() -> dict:
         risk_dist = customer_stats._mapping
         int_stats = intervention_stats._mapping
         prod_stats = product_stats._mapping
+        stress_stats = stress_indicators._mapping
 
         total_customers = risk_dist["total_customers"] or 0
         at_risk = (risk_dist["high_risk_count"] or 0) + (
@@ -711,18 +726,8 @@ def get_dashboard_stats() -> dict:
                 "sms": int_stats["sms_count"] or 0,
             },
             "active_interventions": int_stats["active_interventions"] or 0,
-            "resolution_rate": round(
-                (int_stats["resolved_count"] or 0)
-                / (int_stats["total_interventions"] or 1)
-                * 100,
-                1,
-            ),
-            "acceptance_rate": round(
-                (int_stats["accepted_count"] or 0)
-                / (int_stats["total_interventions"] or 1)
-                * 100,
-                1,
-            ),
+            "avg_salary_delay": round(float(stress_stats["avg_salary_delay"]), 1),
+            "total_stress_queries": int(stress_stats["total_stress_queries"]),
             "risk_by_product": {
                 "home_loan": {"at_risk": prod_stats["home_loan_at_risk"] or 0},
                 "credit_card": {"at_risk": prod_stats["credit_card_at_risk"] or 0},

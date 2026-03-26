@@ -11,7 +11,8 @@ import {
     Users,
     Phone,
     CheckCircle,
-    TrendingUp
+    TrendingUp,
+    Activity
 } from 'lucide-react'
 import {
     PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -147,11 +148,11 @@ export default function Dashboard() {
                         accent: "bg-red-50 text-red-900 border-red-100"
                     },
                     {
-                        label: "Resolution Rate",
-                        value: `${stats?.resolution_rate || 0}%`,
-                        desc: "Cases Resolved",
-                        icon: <CheckCircle size={16} className="text-emerald-500" />,
-                        accent: "bg-emerald-50 text-emerald-900 border-emerald-100"
+                        label: "Avg Salary Delay",
+                        value: `${stats?.avg_salary_delay || 0}d`,
+                        desc: "Portfolio Average",
+                        icon: <Activity size={16} className="text-amber-500" />,
+                        accent: "bg-amber-50 text-amber-900 border-amber-100"
                     },
                     {
                         label: "Active Interventions",
@@ -248,42 +249,39 @@ export default function Dashboard() {
 
                 {/* Resolution & Acceptance */}
                 <div className="lg:col-span-4 space-y-6">
-                    {/* Resolution Rate */}
+                    {/* Stress Search Volume */}
                     <div className="bg-white rounded-[3rem] p-8 border border-zinc-100 shadow-sm">
                         <div className="flex items-center justify-between mb-6">
                             <div>
-                                <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Success Rate</div>
-                                <h3 className="text-xl font-black tracking-tight uppercase">Resolution Rate</h3>
+                                <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Behavioral Signal</div>
+                                <h3 className="text-xl font-black tracking-tight uppercase">Stress Queries</h3>
                             </div>
-                            <CheckCircle size={20} className="text-emerald-500" />
+                            <ShieldAlert size={20} className="text-red-500" />
                         </div>
                         <div className="flex items-end gap-3 mb-4">
-                            <span className="text-5xl font-black tracking-tight text-emerald-500">{stats?.resolution_rate || 0}%</span>
+                            <span className="text-5xl font-black tracking-tight text-red-500">{stats?.total_stress_queries || 0}</span>
+                            <span className="text-[10px] font-black text-zinc-300 uppercase mb-2">Total Hits</span>
                         </div>
-                        <div className="h-3 bg-zinc-100 rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                                style={{ width: `${stats?.resolution_rate || 0}%` }}
-                            />
-                        </div>
+                        <div className="text-[11px] text-zinc-500 font-medium">In-app searches for debt assistance</div>
                     </div>
 
-                    {/* Acceptance Rate */}
+                    {/* Portfolio Liquidity */}
                     <div className="bg-white rounded-[3rem] p-8 border border-zinc-100 shadow-sm">
                         <div className="flex items-center justify-between mb-6">
                             <div>
-                                <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Engagement</div>
-                                <h3 className="text-xl font-black tracking-tight uppercase">Acceptance Rate</h3>
+                                <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Portfolio Health</div>
+                                <h3 className="text-xl font-black tracking-tight uppercase">Income Delay</h3>
                             </div>
-                            <TrendingUp size={20} className="text-indigo-500" />
+                            <Activity size={20} className="text-amber-500" />
                         </div>
                         <div className="flex items-end gap-3 mb-4">
-                            <span className="text-5xl font-black tracking-tight text-indigo-500">{stats?.acceptance_rate || 0}%</span>
+                            <span className="text-5xl font-black tracking-tight text-amber-500">{stats?.avg_salary_delay || 0}d</span>
+                            <span className="text-[10px] font-black text-zinc-300 uppercase mb-2">Avg Delay</span>
                         </div>
                         <div className="h-3 bg-zinc-100 rounded-full overflow-hidden">
                             <div
-                                className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-                                style={{ width: `${stats?.acceptance_rate || 0}%` }}
+                                className="h-full bg-amber-500 rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(((stats?.avg_salary_delay || 0) / 10) * 100, 100)}%` }}
                             />
                         </div>
                     </div>

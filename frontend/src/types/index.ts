@@ -184,8 +184,8 @@ export interface DashboardStats {
         sms: number;
     };
     active_interventions: number;
-    resolution_rate: number;
-    acceptance_rate: number;
+    avg_salary_delay: number;
+    total_stress_queries: number;
     risk_by_product: {
         home_loan: { at_risk: number };
         credit_card: { at_risk: number };
