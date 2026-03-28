@@ -13,12 +13,27 @@ interface LiveFeedContextType {
 const LiveFeedContext = createContext<LiveFeedContextType | undefined>(undefined);
 
 export const LiveFeedProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [customers, setCustomers] = useState<CustomerSummary[]>([]);
-    const [pipelineDetails, setPipelineDetails] = useState<Record<string, PipelineDetails>>({});
+    const [customers, setCustomers] = useState<CustomerSummary[]>(() => {
+        const saved = localStorage.getItem('hoh_customers');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [pipelineDetails, setPipelineDetails] = useState<Record<string, PipelineDetails>>(() => {
+        const saved = localStorage.getItem('hoh_pipeline_details');
+        return saved ? JSON.parse(saved) : {};
+    });
     const [eventCount, setEventCount] = useState(0);
     const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
     const [connected, setConnected] = useState(false);
     const esRef = useRef<EventSource | null>(null);
+
+    // Persistence effects
+    useEffect(() => {
+        localStorage.setItem('hoh_customers', JSON.stringify(customers));
+    }, [customers]);
+
+    useEffect(() => {
+        localStorage.setItem('hoh_pipeline_details', JSON.stringify(pipelineDetails));
+    }, [pipelineDetails]);
 
     useEffect(() => {
         // Only start if not already running

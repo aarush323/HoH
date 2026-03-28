@@ -5,6 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import json
 from datetime import datetime
+from collections import defaultdict
 from kafka import KafkaConsumer
 from db.postgres import get_connection
 from db.cassandra_component import get_session

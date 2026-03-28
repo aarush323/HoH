@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
 import { useLiveFeed } from '../context/LiveFeedContext'
 import { api } from '../api/client'
 import type { PipelineDetails, ShapFactor } from '../types'
@@ -158,14 +157,37 @@ function generateDecisionSummary(details: PipelineDetails): string {
 /* ─── Main Component ─── */
 
 export default function IngestionStream() {
-    const navigate = useNavigate()
     const { connected: contextConnected, pipelineDetails } = useLiveFeed()
     const [isSimulating, setIsSimulating] = useState(false)
     const [debugExpanded, setDebugExpanded] = useState(false)
 
     // SSE-driven live state
-    const [activeCustomerId, setActiveCustomerId] = useState<string | null>(null)
-    const [activeCustomerStages, setActiveCustomerStages] = useState<any[]>([])
+    const [activeCustomerId, setActiveCustomerId] = useState<string | null>(() => {
+        return localStorage.getItem('hoh_active_customer_id')
+    })
+    const [activeCustomerStages, setActiveCustomerStages] = useState<any[]>(() => {
+        const saved = localStorage.getItem('hoh_active_customer_stages')
+        return saved ? JSON.parse(saved) : []
+    })
+    const [pastCustomers, setPastCustomers] = useState<any[]>(() => {
+        const saved = localStorage.getItem('hoh_past_customers')
+        return saved ? JSON.parse(saved) : []
+    })
+    // Persistence Effects
+    useEffect(() => {
+        if (activeCustomerId) localStorage.setItem('hoh_active_customer_id', activeCustomerId)
+        else localStorage.removeItem('hoh_active_customer_id')
+    }, [activeCustomerId])
+
+    useEffect(() => {
+        localStorage.setItem('hoh_active_customer_stages', JSON.stringify(activeCustomerStages))
+    }, [activeCustomerStages])
+
+    useEffect(() => {
+        localStorage.setItem('hoh_past_customers', JSON.stringify(pastCustomers))
+    }, [pastCustomers])
+
+    const latestEventRef = useRef<any>(null)
     const [stats, setStats] = useState({ totalRecords: 0, detectedRisk: 0 })
 
     useEffect(() => {
@@ -184,8 +206,16 @@ export default function IngestionStream() {
                 }
 
                 if (event.stage === 'CUSTOMER_DONE') {
-                    setActiveCustomerId(null)
-                    setActiveCustomerStages([])
+                    if (latestEventRef.current && (latestEventRef.current.risk_score != null || latestEventRef.current.stage === 'OUTREACH')) {
+                        const final = latestEventRef.current
+                        setPastCustomers(prev => {
+                            // Deduplicate by customer_id + week
+                            if (prev.find(c => c.customer_id === final.customer_id && c.week === final.week)) return prev
+                            return [final, ...prev].slice(0, 50) // Increased history size
+                        })
+                    }
+                    // Keep activeCustomerId so card persists, but clear the ref to avoid re-pushing
+                    latestEventRef.current = null
                     return
                 }
 
@@ -193,10 +223,23 @@ export default function IngestionStream() {
 
                 setActiveCustomerId(prevId => {
                     if (event.customer_id !== prevId) {
+                        // If we had a previous customer that wasn't "done" formally but a new one started
+                        if (prevId && latestEventRef.current && (latestEventRef.current.risk_score != null || latestEventRef.current.stage === 'OUTREACH')) {
+                            const final = latestEventRef.current
+                            setPastCustomers(prev => {
+                                if (prev.find(c => c.customer_id === final.customer_id && c.week === final.week)) return prev
+                                return [final, ...prev].slice(0, 50)
+                            })
+                        }
                         setActiveCustomerStages([event])
+                        latestEventRef.current = event
                         return event.customer_id
                     } else {
-                        setActiveCustomerStages(prev => [...prev, event])
+                        setActiveCustomerStages(prev => {
+                            const next = [...prev, event]
+                            latestEventRef.current = event
+                            return next
+                        })
                         return prevId
                     }
                 })
@@ -515,7 +558,7 @@ export default function IngestionStream() {
                         SECTION 7: EXPANDABLE DEBUG (full pipeline details)
                     ══════════════════════════════════════════════════════════════ */}
                     {details && (
-                        <div className="bg-white rounded-[2.5rem] border border-zinc-100 shadow-sm overflow-hidden">
+                        <div className="bg-white rounded-[2.5rem] border border-zinc-100 shadow-sm overflow-hidden mb-8">
                             <button
                                 onClick={() => setDebugExpanded(!debugExpanded)}
                                 className="w-full flex items-center justify-between px-8 py-5 text-xs font-black uppercase tracking-widest text-zinc-400 hover:text-zinc-900 transition-colors hover:bg-zinc-50/50"
@@ -533,22 +576,90 @@ export default function IngestionStream() {
                         </div>
                     )}
 
-                    {/* Navigate button */}
-                    <div className="flex items-center gap-4 justify-end">
-                        <button
-                            onClick={() => navigate(`/journey/${activeCustomerId}`)}
-                            className="flex items-center gap-3 h-14 px-8 bg-zinc-950 text-white rounded-2xl text-[10px] font-bold tracking-[.15em] uppercase hover:bg-[#004ac6] transition-all active:scale-95 shadow-xl"
-                        >
-                            Watch Full Journey
-                            <ArrowUpRight size={16} strokeWidth={3} />
-                        </button>
-                        <button
-                            onClick={() => navigate(`/customer/${activeCustomerId}`)}
-                            className="h-14 px-8 bg-zinc-50 text-zinc-500 rounded-2xl text-[10px] font-bold tracking-[.15em] uppercase hover:bg-zinc-950 hover:text-white transition-all border border-zinc-100"
-                        >
-                            View Profile
-                        </button>
-                    </div>
+                    {/* COMPLETED Badge for active card */}
+                    {latestEvent?.stage === 'OUTREACH' && (
+                        <div className="flex justify-end -mt-4 mb-12">
+                            <div className="px-6 py-2 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 animate-scale-pop shadow-sm">
+                                <CheckCircle2 size={14} strokeWidth={3} />
+                                Assessment Completed
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ══════════════════════════════════════════════════════════════
+                        SECTION 8: PROCESSED HISTORY
+                    ══════════════════════════════════════════════════════════════ */}
+                    {pastCustomers.length > 0 && (
+                        <div className="pt-16 border-t border-zinc-100 mt-16 animate-fade-in">
+                            <div className="flex items-center gap-4 mb-8">
+                                <div className="w-10 h-10 rounded-xl bg-zinc-900 flex items-center justify-center">
+                                    <CheckCircle2 size={20} className="text-zinc-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-zinc-900 uppercase tracking-widest leading-none">Processed Transactions</h3>
+                                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-1.5">Recently completed assessments</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {pastCustomers
+                                    .filter(pc => pc.customer_id !== activeCustomerId)
+                                    .map((pc, i) => {
+                                        const pcDetails = pipelineDetails[pc.customer_id]
+                                        const pcIsHigh = pc.global_risk === 'HIGH'
+                                        const score = pc.risk_score ?? 0
+                                        return (
+                                            <div
+                                                key={`${pc.customer_id}-${pc.week}-${i}`}
+                                                className="group bg-white rounded-3xl p-6 border border-zinc-100 shadow-sm hover:shadow-xl hover:border-[#004ac6]/20 transition-all cursor-pointer"
+                                                onClick={() => {
+                                                    setActiveCustomerId(pc.customer_id)
+                                                    setActiveCustomerStages([pc])
+                                                    latestEventRef.current = pc
+                                                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                                                }}
+                                            >
+                                                <div className="flex items-start justify-between mb-6">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${pcIsHigh ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'}`}>
+                                                            <Database size={16} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-black text-zinc-950">{pc.customer_id}</div>
+                                                            <div className="text-[10px] text-zinc-400 font-bold uppercase">Week {pc.week || '—'}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${pcIsHigh ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                                                        {pc.global_risk || 'LOW'}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-3 mb-6">
+                                                    <div className="flex justify-between items-baseline">
+                                                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Risk Score</span>
+                                                        <span className="text-sm font-black text-zinc-950">{(score * 100).toFixed(1)}%</span>
+                                                    </div>
+                                                    <div className="h-1.5 bg-zinc-50 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={`h-full rounded-full ${pcIsHigh ? 'bg-red-500' : 'bg-emerald-500'}`}
+                                                            style={{ width: `${score * 100}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center justify-between pt-4 border-t border-zinc-50">
+                                                    <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
+                                                        {pcDetails?.intervention?.method?.replace(/_/g, ' ') || 'Monitored'}
+                                                    </div>
+                                                    <ArrowUpRight size={14} className="text-zinc-300 group-hover:text-[#004ac6] transition-colors" />
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                            </div>
+                        </div>
+                    )}
+
                 </div>
             )}
 

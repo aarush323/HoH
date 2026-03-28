@@ -12,7 +12,7 @@ KAFKA_TOPIC = "customer-weekly-observations"
 KAFKA_BROKER = "127.0.0.1:9093"
 CSV_FILE = "pipeline/pre_delinquency_dataset.csv"
 DELAY_SECONDS = 2.0
-DEMO_CUSTOMERS = {"C01228","C00058"}
+DEMO_CUSTOMERS = {"C10001","C00058","C10003"}
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
@@ -66,84 +66,120 @@ def run_producer(limit_customers=None):
 
     sent = 0
     skipped = 0
+
+    from collections import defaultdict
+
+    customer_rows = defaultdict(list)
+
+    # Step 1: collect ALL rows for target customers
     with open(CSV_FILE, newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if target_customers and row["customer_id"] not in target_customers:
-                continue
+            cid = row["customer_id"].strip()
+            if cid in target_customers:
+                customer_rows[cid].append(row)
 
-            customer_id = row["customer_id"]
-            week = row["observation_week"]
+    # Step 2: pick last 5 weeks per customer
+    final_rows = []
 
-            if _already_sent(customer_id, week):
-                skipped += 1
-                continue
+    for cid in DEMO_CUSTOMERS:
+        rows = customer_rows[cid]
 
-            message = {
-                "customer_id": customer_id,
-                "observation_week": week,
-                "event_timestamp": week,
-                "source": "dataset_seed",
-                "age": int(row["age"]),
-                "customer_segment": row["customer_segment"],
-                "geography_zone": row["geography_zone"],
-                "product_type": row["product_type"],
-                "account_vintage_months": int(row["account_vintage_months"]),
-                "emi_to_income_ratio": float(row["emi_to_income_ratio"]),
-                "salary_delay_days": int(row["salary_delay_days"]),
-                "salary_drop_pct": float(row["salary_drop_pct"]),
-                "avg_daily_balance_inr": float(row["avg_daily_balance_inr"]),
-                "balance_trend_pct": float(row["balance_trend_pct"]),
-                "net_cashflow_ratio": float(row["net_cashflow_ratio"]),
-                "savings_drawdown_pct": float(row["savings_drawdown_pct"]),
-                "savings_withdrawal_count": int(row["savings_withdrawal_count"]),
-                "utility_payment_delay_days": int(row["utility_payment_delay_days"]),
-                "num_bills_paid_late_last_4w": int(row["num_bills_paid_late_last_4w"]),
-                "discretionary_spend_inr": float(row["discretionary_spend_inr"]),
-                "discretionary_vs_4w_avg_pct": float(
-                    row["discretionary_vs_4w_avg_pct"]
-                ),
-                "gambling_lottery_spend_inr": float(row["gambling_lottery_spend_inr"]),
-                "gambling_4w_change_pct": float(row["gambling_4w_change_pct"]),
-                "upi_to_lending_apps_count": int(row["upi_to_lending_apps_count"]),
-                "upi_to_lending_apps_amount_inr": float(
-                    row["upi_to_lending_apps_amount_inr"]
-                ),
-                "atm_vs_4w_avg_pct": float(row["atm_vs_4w_avg_pct"]),
-                "auto_debit_failures": int(row["auto_debit_failures"]),
-                "credit_card_utilization_pct": float(
-                    row["credit_card_utilization_pct"]
-                ),
-                "credit_inquiries_last_30d": int(row["credit_inquiries_last_30d"]),
-                "paying_minimum_only_flag": bool(int(row["paying_minimum_only_flag"])),
-                "mobile_app_logins": int(row["mobile_app_logins"]),
-                "financial_stress_queries": int(row["financial_stress_queries"]),
-                "customer_service_calls": int(row["customer_service_calls"]),
-                "will_default_next_2_4_weeks": bool(
-                    int(row["will_default_next_2_4_weeks"])
-                ),
-                # --- NEW ML FIELDS ---
-                "monthly_income_inr": float(row["monthly_income_inr"]),
-                "emi_amount_inr": float(row["emi_amount_inr"]),
-                "emi_due_this_week": bool(int(row["emi_due_this_week"])),
-                "available_funds_inr": float(row["available_funds_inr"]),
-                "emi_paid_flag": bool(int(row["emi_paid_flag"])),
-                "emi_bounced_flag": bool(int(row["emi_bounced_flag"])),
-                "missed_emi_count_rolling": int(row["missed_emi_count_rolling"]),
-                "balance_velocity": float(row["balance_velocity"]),
-                "salary_delay_delta": float(row["salary_delay_delta"]),
-                "discretionary_velocity": float(row["discretionary_velocity"]),
-                "upi_lending_delta": float(row["upi_lending_delta"]),
-                "savings_drawdown_velocity": float(row["savings_drawdown_velocity"]),
-                "external_shock_flag": bool(int(row["external_shock_flag"])),
-                "shock_type": row["shock_type"],
-            }
-            producer.send(KAFKA_TOPIC, value=message)
-            _mark_sent(customer_id, week)
-            time.sleep(DELAY_SECONDS)
-            sent += 1
-            if sent % 100 == 0:
-                print(f"[Producer] Sent {sent} messages...")
+        # sort by week (YYYY-MM-DD works with string sort)
+        rows.sort(key=lambda x: x["observation_week"])
+
+        # Deduplicate by week to ensure unique weeks (keep last match if multiple per week)
+        unique_weeks = {}
+        for r in rows:
+            unique_weeks[r["observation_week"]] = r
+        
+        # Get sorted list of unique week rows
+        sorted_week_rows = [unique_weeks[w] for w in sorted(unique_weeks.keys())]
+
+        # take exactly last 4
+        last_four = sorted_week_rows[-4:]
+        
+        print(f"[Producer] Selection for {cid}: {[r['observation_week'] for r in last_four]}")
+        final_rows.extend(last_four)
+
+    # Step 3: stream in order (optional but cleaner demo)
+    final_rows.sort(key=lambda x: (x["customer_id"], x["observation_week"]))
+
+    print(f"[Producer] Total events to stream: {len(final_rows)}")
+
+    for row in final_rows:
+        customer_id = row["customer_id"]
+        week = row["observation_week"]
+
+        if _already_sent(customer_id, week):
+            skipped += 1
+            continue
+
+        message = {
+            "customer_id": customer_id,
+            "observation_week": week,
+            "event_timestamp": week,
+            "source": "dataset_seed",
+            "age": int(row["age"]),
+            "customer_segment": row["customer_segment"],
+            "geography_zone": row["geography_zone"],
+            "product_type": row["product_type"],
+            "account_vintage_months": int(row["account_vintage_months"]),
+            "emi_to_income_ratio": float(row["emi_to_income_ratio"]),
+            "salary_delay_days": int(row["salary_delay_days"]),
+            "salary_drop_pct": float(row["salary_drop_pct"]),
+            "avg_daily_balance_inr": float(row["avg_daily_balance_inr"]),
+            "balance_trend_pct": float(row["balance_trend_pct"]),
+            "net_cashflow_ratio": float(row["net_cashflow_ratio"]),
+            "savings_drawdown_pct": float(row["savings_drawdown_pct"]),
+            "savings_withdrawal_count": int(row["savings_withdrawal_count"]),
+            "utility_payment_delay_days": int(row["utility_payment_delay_days"]),
+            "num_bills_paid_late_last_4w": int(row["num_bills_paid_late_last_4w"]),
+            "discretionary_spend_inr": float(row["discretionary_spend_inr"]),
+            "discretionary_vs_4w_avg_pct": float(
+                row["discretionary_vs_4w_avg_pct"]
+            ),
+            "gambling_lottery_spend_inr": float(row["gambling_lottery_spend_inr"]),
+            "gambling_4w_change_pct": float(row["gambling_4w_change_pct"]),
+            "upi_to_lending_apps_count": int(row["upi_to_lending_apps_count"]),
+            "upi_to_lending_apps_amount_inr": float(
+                row["upi_to_lending_apps_amount_inr"]
+            ),
+            "atm_vs_4w_avg_pct": float(row["atm_vs_4w_avg_pct"]),
+            "auto_debit_failures": int(row["auto_debit_failures"]),
+            "credit_card_utilization_pct": float(
+                row["credit_card_utilization_pct"]
+            ),
+            "credit_inquiries_last_30d": int(row["credit_inquiries_last_30d"]),
+            "paying_minimum_only_flag": bool(int(row["paying_minimum_only_flag"])),
+            "mobile_app_logins": int(row["mobile_app_logins"]),
+            "financial_stress_queries": int(row["financial_stress_queries"]),
+            "customer_service_calls": int(row["customer_service_calls"]),
+            "will_default_next_2_4_weeks": bool(
+                int(row["will_default_next_2_4_weeks"])
+            ),
+            # --- NEW ML FIELDS ---
+            "monthly_income_inr": float(row["monthly_income_inr"]),
+            "emi_amount_inr": float(row["emi_amount_inr"]),
+            "emi_due_this_week": bool(int(row["emi_due_this_week"])),
+            "available_funds_inr": float(row["available_funds_inr"]),
+            "emi_paid_flag": bool(int(row["emi_paid_flag"])),
+            "emi_bounced_flag": bool(int(row["emi_bounced_flag"])),
+            "missed_emi_count_rolling": int(row["missed_emi_count_rolling"]),
+            "balance_velocity": float(row["balance_velocity"]),
+            "salary_delay_delta": float(row["salary_delay_delta"]),
+            "discretionary_velocity": float(row["discretionary_velocity"]),
+            "upi_lending_delta": float(row["upi_lending_delta"]),
+            "savings_drawdown_velocity": float(row["savings_drawdown_velocity"]),
+            "external_shock_flag": bool(int(row["external_shock_flag"])),
+            "shock_type": row["shock_type"],
+        }
+        producer.send(KAFKA_TOPIC, value=message)
+        _mark_sent(customer_id, week)
+        time.sleep(DELAY_SECONDS)
+        sent += 1
+        if sent % 100 == 0:
+            print(f"[Producer] Sent {sent} messages...")
 
     producer.flush()
 

@@ -299,17 +299,14 @@ def score_from_kafka(record: dict) -> tuple:
 
     print(f"[ML DEBUG] Meta-Ensemble Features (Unused for now): {meta_features}")
 
-    import math
+    # 3. Meta-Ensemble (Now using simple average instead of weighted)
+    lgb_p_f = float(lgb_p)
+    gru_p_f = float(gru_p)
+    
+    # User request: Use simple average of both models
+    risk_score = round((lgb_p_f + gru_p_f) / 2, 4)
 
-    base_lr = _ensemble_model.calibrated_classifiers_[0].estimator
-    lgb_weight = float(base_lr.coef_[0][0])
-    gru_weight = float(base_lr.coef_[0][1])
-    intercept = float(base_lr.intercept_[0])
-
-    raw = lgb_weight * lgb_p_f + gru_weight * gru_p_f + intercept
-    risk_score = round(1 / (1 + math.exp(-raw)), 4)
-
-    print(f"[ML DEBUG] Final Ensemble Risk Score (Weighted): {risk_score:.4f}")
+    print(f"[ML DEBUG] Final Ensemble Risk Score (Averaged): {risk_score:.4f}")
 
     # 4. SHAP
     merged_shap = lgb_shap + gru_shap
