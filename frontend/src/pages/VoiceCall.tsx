@@ -38,34 +38,38 @@ export default function VoiceCall() {
 
     useEffect(() => {
         let msgId = 0;
+        const newMessages: Message[] = [];
+        
         events.forEach((event) => {
             switch (event.event) {
                 case 'agent_speaking':
-                    setMessages((prev) => [...prev, {
+                    newMessages.push({
                         id: msgId++,
                         role: 'agent',
                         text: event.data.text as string,
                         timestamp: event.timestamp,
-                    }]);
+                    });
                     break;
                 case 'transcript':
-                    setMessages((prev) => [...prev, {
+                    newMessages.push({
                         id: msgId++,
                         role: 'customer',
                         text: event.data.text as string,
                         timestamp: event.timestamp,
-                    }]);
+                    });
                     break;
                 case 'listening':
-                    setMessages((prev) => [...prev, {
+                    newMessages.push({
                         id: msgId++,
                         role: 'system',
                         text: '🎤 Listening...',
                         timestamp: event.timestamp,
-                    }]);
+                    });
                     break;
             }
         });
+        
+        setMessages(newMessages);
     }, [events]);
 
     useEffect(() => {

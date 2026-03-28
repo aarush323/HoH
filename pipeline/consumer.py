@@ -11,6 +11,8 @@ from db.cassandra_component import get_session
 from sqlalchemy import text
 import httpx
 from db.redis_client import publish_event
+from kafka.admin import KafkaAdminClient, NewTopic
+import time
 
 KAFKA_TOPIC = "customer-weekly-observations"
 KAFKA_BROKER = "127.0.0.1:9093"
@@ -377,8 +379,31 @@ def insert_into_db(record: dict):
     except Exception as e:
         print(f"[Cassandra] Insert failed for {record.get('customer_id')}: {e}")
 
+def recreate_kafka_topic():
+    """Deletes and recreates the Kafka topic to ensure a clean start."""
+    try:
+        admin_client = KafkaAdminClient(bootstrap_servers=KAFKA_BROKER, api_version=(2, 0, 2))
+        
+        # 1. Delete topic if exists
+        existing_topics = admin_client.list_topics()
+        if KAFKA_TOPIC in existing_topics:
+            print(f"[Admin] Deleting topic '{KAFKA_TOPIC}'...")
+            admin_client.delete_topics([KAFKA_TOPIC])
+            # Wait for deletion to propagate
+            time.sleep(2)
+        
+        # 2. Recreate topic
+        print(f"[Admin] Creating topic '{KAFKA_TOPIC}'...")
+        new_topic = NewTopic(name=KAFKA_TOPIC, num_partitions=1, replication_factor=1)
+        admin_client.create_topics([new_topic])
+        admin_client.close()
+        print(f"[Admin] Topic '{KAFKA_TOPIC}' recreated successfully.")
+    except Exception as e:
+        print(f"[Admin] Kafka management failed: {e}")
 
 def run_consumer():
+    recreate_kafka_topic()
+
     """Main consumer loop - call this to start consuming from Kafka."""
     try:
         cons = get_consumer()

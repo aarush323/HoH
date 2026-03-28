@@ -34,6 +34,10 @@ from sqlalchemy import text
 from db.redis_client import get_cached_risk_score, cache_risk_score
 import json
 import asyncio
+from threading import Lock
+
+active_voice_calls = set()
+voice_call_lock = Lock()
 
 app = FastAPI(title="Pre-Delinquency Intervention Engine")
 app.add_middleware(
@@ -80,7 +84,7 @@ async def execute_voice_stream(pending_id: int):
     """
     import json
     import asyncio
-    from queue import Queue
+    from queue import Queue, Empty
     from threading import Thread
 
     pending = get_pending_intervention_by_id(pending_id)
@@ -89,6 +93,15 @@ async def execute_voice_stream(pending_id: int):
 
     if pending.get("channel") != "voice":
         raise HTTPException(status_code=400, detail="Not a voice intervention")
+
+    if pending.get("status") == "EXECUTED":
+        raise HTTPException(status_code=400, detail="Intervention already executed")
+
+    # In-memory lock to prevent duplicate execution within the same process
+    with voice_call_lock:
+        if pending_id in active_voice_calls:
+            raise HTTPException(status_code=400, detail="Voice call for this intervention is already in progress")
+        active_voice_calls.add(pending_id)
 
     event_queue = Queue()
     # Use a mutable container to track result
@@ -105,9 +118,11 @@ async def execute_voice_stream(pending_id: int):
             def emit_fn(event: str, data: dict):
                 event_queue.put((event, data))
 
-            result = run_call(voice_payload, emit_fn)
-            event_queue.put(("call_complete", result))
+            run_call(voice_payload, emit_fn)
         except Exception as e:
+            import traceback
+            print(f"[VOICE-STREAM] Thread crashed: {e}")
+            print(traceback.format_exc())
             event_queue.put(("error", {"message": str(e)}))
 
     def event_generator():
@@ -126,7 +141,7 @@ async def execute_voice_stream(pending_id: int):
                     # Yield SSE formatted message
                     yield f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 
-                    if event_type == "call_complete":
+                    if event_type in ["call_end", "call_complete"]:
                         call_result[0] = {"executed": True, "voice_result": data}
                         break
                     elif event_type == "error":
@@ -136,19 +151,37 @@ async def execute_voice_stream(pending_id: int):
                         }
                         break
 
-                except Exception:
-                    # Queue timeout, continue waiting
+                except Empty:
+                    # Queue timeout, check if thread is still alive
                     if not call_thread.is_alive():
+                        # Thread died without putting an end event or error
+                        if not call_result[0].get("executed") and not call_result[0].get("error"):
+                            print(f"[VOICE-STREAM] Thread died unexpectedly for pending_id={pending_id}")
+                            call_result[0] = {"executed": False, "error": "Thread died unexpectedly"}
+                            yield f"event: error\ndata: {json.dumps(call_result[0])}\n\n"
                         break
                     continue
+                except Exception as loop_err:
+                    print(f"[VOICE-STREAM] Loop error: {loop_err}")
+                    call_result[0] = {"executed": False, "error": str(loop_err)}
+                    yield f"event: error\ndata: {json.dumps(call_result[0])}\n\n"
+                    break
+            
+            # Final event to truly signal end
+            yield f"event: call_ended\ndata: {json.dumps({'status': 'stream_closed'})}\n\n"
 
         finally:
+            # Release the in-memory lock
+            with voice_call_lock:
+                active_voice_calls.discard(pending_id)
+                
             # Mark intervention as executed in database
             try:
                 mark_intervention_executed(pending_id, call_result[0])
-                print(f"[VOICE-STREAM] Marked pending_id={pending_id} as executed")
+                print(f"[VOICE-STREAM] Finished stream for pending_id={pending_id}")
             except Exception as db_err:
                 print(f"[VOICE-STREAM] Failed to mark executed: {db_err}")
+
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

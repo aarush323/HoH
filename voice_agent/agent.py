@@ -285,7 +285,7 @@ def run_call(voice_payload: dict, emit_fn: Callable[[str, dict], None] = None) -
     result = run_loop(voice_payload, call_strategy, call_state, emit_fn)
 
     # Emit final result
-    emit_fn("call_end", result)
+    emit_fn("call_complete", result)
     logger.info(f"Voice call complete. Result: {result}")
 
     return result
