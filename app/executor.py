@@ -1,5 +1,27 @@
 import sys
 import os
+from twilio.rest import Client
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# --- Twilio Outreach Config (Safe for Demo) ---
+# We force the destination to the demo number for safety/free trial
+TW_ACCOUNT_SID = os.getenv("TW_ACCOUNT_SID") or os.getenv("TWILIO_ACCOUNT_SID") or os.getenv("TWILIO_SID")
+TW_AUTH_TOKEN = os.getenv("TW_AUTH_TOKEN") or os.getenv("TWILIO_AUTH_TOKEN") or os.getenv("TWILIO_TOKEN")
+TW_WHATSAPP_SENDER = os.getenv("TW_WHATSAPP_SENDER") or os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+# For the demo, we always send to this number regardless of customer ID
+DEMO_RECIPIENT_PHONE = os.getenv("DEMO_RECIPIENT_PHONE") or os.getenv("TEST_RECIPIENT_PHONE")
+TWILIO_ENABLED = os.getenv("TWILIO_ENABLED", "false").lower() == "true"
+
+# Single initialization for performance
+TW_CLIENT = None
+if TWILIO_ENABLED and TW_ACCOUNT_SID and TW_AUTH_TOKEN:
+    try:
+        TW_CLIENT = Client(TW_ACCOUNT_SID, TW_AUTH_TOKEN)
+        print(f"[INIT] Twilio Client initialized for WhatsApp Demo (Enabled: {TWILIO_ENABLED}).")
+    except Exception as e:
+        print(f"[INIT] Twilio Init Failure: {e}")
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -102,24 +124,54 @@ def _execute_whatsapp(
     customer_id: str, name: str, message: str, intervention_method: str
 ) -> dict:
     """
-    Execute WhatsApp message.
+    Execute WhatsApp outreach via Twilio (Demo Mode).
+    All messages are sent to the verified demo phone number.
+    Always prints to terminal for fallback/audit.
     """
-    print(f"\n[EXECUTE] WHATSAPP for {customer_id}")
-    print(f"[EXECUTE] Customer: {name}")
-    print(f"[EXECUTE] Message: {message[:100]}...")
+    # 1. Format the message
+    formatted_message = f"Hi {name.split()[0] if name else 'Customer'},\n\n{message}"
 
-    # In production, this would integrate with WhatsApp Business API
-    # For now, just simulate sending
+    # 2. MANDATORY TERMINAL FALLBACK (Requested by user)
+    print(f"\n" + "="*50)
+    print(f"[OUTREACH] WHATSAPP TRIGGERED")
+    print(f"[TARGET] Customer ID: {customer_id}")
+    print(f"[RECIPIENT] {DEMO_RECIPIENT_PHONE if DEMO_RECIPIENT_PHONE else 'Verified Number Only'}")
+    print(f"[CONTENT] \n{formatted_message}")
+    print("="*50 + "\n")
 
-    formatted_message = f"Hi {name.split()[0] if name else 'Customer'},\n\n{message}\n\nReply STOP to opt out."
+    # 3. Attempt LIVE Execution via Twilio if enabled and configured
+    if TW_CLIENT and TW_WHATSAPP_SENDER and DEMO_RECIPIENT_PHONE:
+        try:
+            print(f"[EXECUTE] Triggering API call to Twilio WhatsApp Sandbox for {customer_id}...")
 
-    print(f"[EXECUTE] WHATSAPP WOULD SEND:")
-    print(formatted_message)
-    print("-" * 50)
+            # Twilio WhatsApp numbers must be prefixed with 'whatsapp:'
+            tw_msg = TW_CLIENT.messages.create(
+                from_=TW_WHATSAPP_SENDER,
+                body=formatted_message,
+                to=f"whatsapp:{DEMO_RECIPIENT_PHONE}"
+            )
 
+            print(f"[SUCCESS] Twilio Message Queued (SID: {tw_msg.sid}) for {customer_id}")
+            return {
+                "executed": True,
+                "message_sent": formatted_message,
+                "twilio_sid": tw_msg.sid,
+                "dispatch_status": "SENT_VIA_TWILIO"
+            }
+        except Exception as e:
+            print(f"[ERROR] Twilio API call failed for {customer_id}: {e}")
+            return {
+                "executed": False,
+                "error": str(e),
+                "message_sent": "Dispatch failed (Check terminal for details)"
+            }
+
+    # 4. Standard Simulation (If Twilio is disabled or missing credentials)
+    print(f"[SIMULATOR] Twilio not enabled or missing credentials for {customer_id}. Logging locally.")
     return {
         "executed": True,
         "message_sent": formatted_message,
+        "dispatch_status": "LOCAL_TERMINAL_ONLY"
     }
 
 

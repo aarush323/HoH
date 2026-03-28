@@ -12,7 +12,7 @@ KAFKA_TOPIC = "customer-weekly-observations"
 KAFKA_BROKER = "127.0.0.1:9093"
 CSV_FILE = "pipeline/pre_delinquency_dataset.csv"
 DELAY_SECONDS = 2.0
-DEMO_CUSTOMERS = {"C00058"}
+DEMO_CUSTOMERS = {"C01228"}
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))

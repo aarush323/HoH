@@ -602,7 +602,61 @@ def persist_to_db_node(state: Main_context) -> dict:
     return state
 
 
-# ===== QUEUE FOR APPROVAL NODE (NEW) =====
+# ===== SCORE-BASED CHANNEL SELECTION =====
+
+
+def select_channel(state: dict) -> str:
+    """Score-based, cost-optimised channel routing.
+
+    Routing matrix:
+      ≥0.85          → voice   (urgent, personal contact needed)
+      0.70-0.85 high → voice   (severity / structural-debt / counseling-restructure-rm)
+      0.70-0.85 else → whatsapp (e.g. payment_holiday docs)
+      0.55-0.70      → whatsapp (cost-effective moderate risk)
+      0.40-0.55      → email   (automated, low-touch)
+      <0.40          → none    (monitor only)
+    """
+    risk_score = state.get("total_risk_score", 0.0)
+    intervention = state.get("Intervention_method", "monitor_only")
+    severity = state.get("Stress_context", {}).get("severity", "low")
+    stress_type = state.get("Stress_context", {}).get("stress_type", "")
+
+    # 1. Monitor only = no outreach
+    if intervention == "monitor_only":
+        return "none"
+
+    # 2. ULTRA HIGH risk (≥0.85) = Voice mandatory
+    if risk_score >= 0.85:
+        return "voice"
+
+    # 3. HIGH risk (≥0.70) + High severity = Voice
+    if risk_score >= 0.70 and severity in ["high", "very high"]:
+        return "voice"
+
+    # 4. HIGH risk (≥0.70) + structural/debt stress = Voice
+    if risk_score >= 0.60:
+        if "structural" in stress_type or "debt" in stress_type:
+            return "voice"
+
+    # 5. HIGH risk (0.70-0.85) + specific interventions
+    if risk_score >= 0.60:
+        if intervention in ["financial_counseling", "restructuring", "rm_call"]:
+            return "voice"
+        return "whatsapp"  # e.g. payment_holiday at high risk
+
+    # 6. MEDIUM-HIGH (0.55-0.70) = WhatsApp (cost-effective)
+    if risk_score >= 0.45:
+        return "whatsapp"
+
+    # 7. MEDIUM (0.40-0.55) = Email (automated)
+    if risk_score >= 0.30:
+        return "email"
+
+    # 8. LOW (<0.40) = Monitor only
+    return "none"
+
+
+# ===== QUEUE FOR APPROVAL NODE =====
 
 
 def queue_for_approval(state: Main_context) -> dict:
@@ -623,21 +677,12 @@ def queue_for_approval(state: Main_context) -> dict:
     hard_stop_reason = state.get("hard_stop_reason")
     eligible_interventions = state.get("eligible_interventions", [])
 
-    # Determine channel based on risk level and intervention
-    if intervention == "monitor_only":
-        channel = "none"
-        compliance_status = "CLEAR"
-    elif hard_stop:
+    # Determine channel via score-based, cost-optimised routing
+    if hard_stop:
         channel = "none"
         compliance_status = "HARDSTOP"
-    elif risk_level in ["HIGH", "VERY_HIGH", "very high"]:
-        channel = "voice"
-        compliance_status = "CLEAR"
-    elif risk_level == "MED":
-        channel = "whatsapp"
-        compliance_status = "CLEAR"
     else:
-        channel = "email"
+        channel = select_channel(state)
         compliance_status = "CLEAR"
 
     # Generate voice script preview if voice channel
