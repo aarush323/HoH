@@ -95,7 +95,13 @@ def fire_intervention(record: dict):
         print(f"[Trigger] Failed for {record['customer_id']}: {e}")
 
 
-def push_event(record: dict, stage: str, triggered: bool | None = None, risk_score: float | None = None, agent_result: dict | None = None):
+def push_event(
+    record: dict,
+    stage: str,
+    triggered: bool | None = None,
+    risk_score: float | None = None,
+    agent_result: dict | None = None,
+):
     """Helper to push granular events to SSE."""
     event = {
         "customer_id": record["customer_id"],
@@ -103,21 +109,54 @@ def push_event(record: dict, stage: str, triggered: bool | None = None, risk_sco
     }
     if stage != "CUSTOMER_DONE":
         event["week"] = record.get("observation_week")
-    
+
     if triggered is not None:
         event["triggered"] = triggered
-    
+
     if risk_score is not None:
         event["risk_score"] = risk_score
 
+    # Build structured pipeline_details instead of raw agent_result blob
     if agent_result is not None:
-        event["agent_result"] = agent_result
-        
+        pipeline_details = {
+            "risk_score": agent_result.get("total_risk_score")
+            or agent_result.get("risk_score")
+            or risk_score
+            or 0,
+            "risk_level": agent_result.get("risk_level")
+            or (
+                "HIGH"
+                if (agent_result.get("total_risk_score") or 0) >= 0.7
+                else "MEDIUM"
+                if (agent_result.get("total_risk_score") or 0) >= 0.4
+                else "LOW"
+            ),
+            "lgb_p": agent_result.get("lgb_p"),
+            "gru_p": agent_result.get("gru_p"),
+            "ensemble_score": agent_result.get("total_risk_score")
+            or agent_result.get("risk_score"),
+            "top_factors": (agent_result.get("shap_factors") or [])[:5],
+            "stress_context": agent_result.get("Stress_context") or {},
+            "intervention": {
+                "method": agent_result.get("intervention_method") or "",
+                "channel": agent_result.get("channel") or "",
+                "message": agent_result.get("message_content") or "",
+                "justification": agent_result.get("intervention_justification") or "",
+            },
+            "compliance": {
+                "hard_stop": agent_result.get("hard_stop", False),
+                "hard_stop_reason": agent_result.get("hard_stop_reason"),
+                "eligible_interventions": agent_result.get("eligible_interventions")
+                or [],
+            },
+        }
+        event["pipeline_details"] = pipeline_details
+
     if stage in ["INGEST", "INGEST_TRIGGERED"]:
         event["balance"] = float(record.get("avg_daily_balance_inr", 0))
         event["salary_delay"] = int(record.get("salary_delay_days", 0))
         event["archetype"] = record.get("customer_segment", "Unknown")
-        
+
     if stage == "OUTREACH":
         if risk_score is not None:
             if risk_score >= 0.7:
@@ -128,7 +167,7 @@ def push_event(record: dict, stage: str, triggered: bool | None = None, risk_sco
                 event["global_risk"] = "LOW"
         else:
             event["global_risk"] = "LOW"
-            
+
     publish_event(event)
 
 
@@ -363,7 +402,7 @@ def run_consumer():
 
             # Check rules FIRST
             triggered = should_trigger(record)
-            
+
             # Step 1: INGEST
             push_event(record, "INGEST", triggered=triggered)
 
@@ -398,9 +437,7 @@ def run_consumer():
                     )
                     ml_result = predict_resp.json()
                     risk_score = ml_result.get("risk_score")
-                    print(
-                        f"[Consumer] ML completed: {customer_id} → risk={risk_score}"
-                    )
+                    print(f"[Consumer] ML completed: {customer_id} → risk={risk_score}")
                     push_event(record, "SCORE", risk_score=risk_score, triggered=True)
                 except Exception as e:
                     print(f"[Consumer Error] Predict failed for {customer_id}: {e}")
@@ -417,8 +454,20 @@ def run_consumer():
                         f"[Consumer] Agents completed: {customer_id} → {intervene_resp.status_code}"
                     )
                     # Push result in ANALYSE and OUTREACH stages
-                    push_event(record, "ANALYSE", risk_score=risk_score, agent_result=agent_result, triggered=True)
-                    push_event(record, "OUTREACH", risk_score=risk_score, agent_result=agent_result, triggered=True)
+                    push_event(
+                        record,
+                        "ANALYSE",
+                        risk_score=risk_score,
+                        agent_result=agent_result,
+                        triggered=True,
+                    )
+                    push_event(
+                        record,
+                        "OUTREACH",
+                        risk_score=risk_score,
+                        agent_result=agent_result,
+                        triggered=True,
+                    )
                 except Exception as e:
                     print(f"[Consumer Error] Intervene failed for {customer_id}: {e}")
             else:

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLiveFeed } from '../context/LiveFeedContext'
 import { api } from '../api/client'
+import PipelineBox from '../components/PipelineBox'
 import {
     Box,
     Shield,
@@ -12,13 +13,16 @@ import {
     CheckCircle2,
     ArrowUpRight,
     Cpu,
-    MessageSquare
+    MessageSquare,
+    ChevronDown,
+    ChevronUp
 } from 'lucide-react'
 
 export default function IngestionStream() {
     const navigate = useNavigate()
-    const { connected: contextConnected } = useLiveFeed()
+    const { connected: contextConnected, pipelineDetails } = useLiveFeed()
     const [isSimulating, setIsSimulating] = useState(false)
+    const [detailsExpanded, setDetailsExpanded] = useState(true)
 
     // New state for transaction-by-transaction live feed
     const [activeCustomerId, setActiveCustomerId] = useState<string | null>(null)
@@ -315,6 +319,27 @@ export default function IngestionStream() {
                     );
                 })()}
             </div>
+
+            {/* Customer Details Section */}
+            {Object.keys(pipelineDetails).length > 0 && (
+                <div className="mt-16">
+                    <button
+                        onClick={() => setDetailsExpanded(!detailsExpanded)}
+                        className="flex items-center gap-2 mb-6 text-xs font-black uppercase tracking-widest text-zinc-400 hover:text-zinc-900 transition-colors"
+                    >
+                        {detailsExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        CUSTOMER DETAILS
+                    </button>
+
+                    {detailsExpanded && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {Object.entries(pipelineDetails).map(([customerId, details]) => (
+                                <PipelineBox key={customerId} customerId={customerId} details={details} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Glossy Visual Legend */}
             <div className="fixed bottom-12 left-1/2 -translate-x-1/2 px-12 py-5 glass-card rounded-[2.5rem] flex items-center gap-10 z-50 animate-fade-in-up border border-white/40 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.1)]">

@@ -188,6 +188,13 @@ async def intervene(customer_id: str, request: Request):
             "voice_script_preview": result.get("voice_script_preview"),
             "total_risk_score": result.get("total_risk_score"),
             "risk_level": result.get("risk_level"),
+            "lgb_p": ml_result.get("lgb_p"),
+            "gru_p": ml_result.get("gru_p"),
+            "shap_factors": ml_result.get("shap_factors"),
+            "Stress_context": result.get("Stress_context", {}),
+            "eligible_interventions": result.get("eligible_interventions", []),
+            "hard_stop": result.get("hard_stop", False),
+            "hard_stop_reason": result.get("hard_stop_reason"),
         }
     except Exception as e:
         import traceback
