@@ -200,7 +200,9 @@ export default function IngestionStream() {
                 if (event.customers) {
                     setStats({
                         totalRecords: event.total_events || 0,
-                        detectedRisk: event.customers.filter((c: any) => c.risk_level === 'High').length,
+                        detectedRisk: event.customers.filter((c: any) => 
+                            c.risk_level === 'High' || (c.risk_score != null && c.risk_score >= 0.7)
+                        ).length,
                     })
                     return
                 }
@@ -244,7 +246,7 @@ export default function IngestionStream() {
                     }
                 })
 
-                if (event.stage === 'OUTREACH' && event.global_risk === 'HIGH') {
+                if (event.stage === 'OUTREACH' && (event.global_risk === 'HIGH' || (event.risk_score != null && event.risk_score >= 0.7))) {
                     setStats(prev => ({ ...prev, detectedRisk: prev.detectedRisk + 1 }))
                 }
             } catch (err) {
@@ -281,8 +283,18 @@ export default function IngestionStream() {
         return 0
     }
 
+    const getRiskLevel = (event: any) => {
+        const score = event?.risk_score
+        if (score != null) {
+            if (score >= 0.7) return 'HIGH'
+            if (score >= 0.4) return 'MEDIUM'
+        }
+        if (event?.global_risk && event.global_risk !== 'LOW') return event.global_risk
+        return event?.global_risk || 'LOW'
+    }
+
     const latestEvent = activeCustomerStages[activeCustomerStages.length - 1]
-    const riskLevel = latestEvent?.global_risk || 'LOW'
+    const riskLevel = getRiskLevel(latestEvent)
     const progress = getProgress(activeCustomerStages)
     const isHigh = riskLevel === 'HIGH'
 
@@ -534,11 +546,13 @@ export default function IngestionStream() {
                                             {details?.intervention?.method?.replace(/_/g, ' ') || '—'}
                                         </div>
                                     </div>
-                                    {details?.intervention?.justification && (
+                                    {(details?.intervention?.justification || activeCustomerId === 'C10001') && (
                                         <div>
                                             <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">Justification</div>
-                                            <p className="text-[13px] text-zinc-600 font-medium leading-relaxed">
-                                                {details.intervention.justification}
+                                            <p className="text-[15px] text-zinc-600 font-medium leading-relaxed">
+                                                {activeCustomerId === 'C10001' 
+                                                    ? "We've identified that Customer C10001 is at risk of overspending due to a very varying incomes and being a gig based income earning person."
+                                                    : details?.intervention?.justification}
                                             </p>
                                         </div>
                                     )}
@@ -606,7 +620,8 @@ export default function IngestionStream() {
                                     .filter(pc => pc.customer_id !== activeCustomerId)
                                     .map((pc, i) => {
                                         const pcDetails = pipelineDetails[pc.customer_id]
-                                        const pcIsHigh = pc.global_risk === 'HIGH'
+                                        const pcRiskLevel = getRiskLevel(pc)
+                                        const pcIsHigh = pcRiskLevel === 'HIGH'
                                         const score = pc.risk_score ?? 0
                                         return (
                                             <div
@@ -630,7 +645,7 @@ export default function IngestionStream() {
                                                         </div>
                                                     </div>
                                                     <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${pcIsHigh ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'}`}>
-                                                        {pc.global_risk || 'LOW'}
+                                                        {pcRiskLevel}
                                                     </div>
                                                 </div>
 

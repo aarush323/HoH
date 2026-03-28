@@ -19,9 +19,19 @@ export default function LiveFeed() {
     const [isSimulating, setIsSimulating] = useState(false)
     const [highRiskCount, setHighRiskCount] = useState(0)
 
+    const getRiskLevel = (c: any) => {
+        const score = c.risk_score
+        if (score != null) {
+            if (score >= 0.7) return 'High'
+            if (score >= 0.4) return 'Medium'
+        }
+        if (c.risk_level && c.risk_level !== 'Low') return c.risk_level
+        return c.risk_level || 'Low'
+    }
+
     useEffect(() => {
-        setHighRiskCount(customers.filter(c => c.risk_level === 'High').length)
-    }, [customers.length, customers.map(c => c.risk_level).join(',')])
+        setHighRiskCount(customers.filter(c => getRiskLevel(c) === 'High').length)
+    }, [customers.length, customers.map(c => `${c.risk_level}-${c.risk_score}`).join(',')])
 
     const handleStartSimulation = async () => {
         setIsSimulating(true)
@@ -91,8 +101,9 @@ export default function LiveFeed() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
                     {customers.map((c) => {
-                        const isHigh = c.risk_level === 'High';
-                        const isLow = c.risk_level === 'Low';
+                        const effectiveLevel = getRiskLevel(c)
+                        const isHigh = effectiveLevel === 'High'
+                        const isLow = effectiveLevel === 'Low'
 
                         return (
                             <div
@@ -111,7 +122,7 @@ export default function LiveFeed() {
                                         </div>
                                     </div>
                                     <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${isHigh ? 'bg-red-500 text-white shadow-sm' : isLow ? 'bg-emerald-500 text-white shadow-sm' : 'bg-zinc-100 text-zinc-500 shadow-sm'}`}>
-                                        {c.risk_level}
+                                        {effectiveLevel}
                                     </span>
                                 </div>
 
@@ -147,7 +158,7 @@ export default function LiveFeed() {
 
                                 {/* Integrated Reasoning Message */}
                                 <div className={`mb-10 pl-6 border-l-3 transition-colors ${isHigh ? 'border-red-500' : isLow ? 'border-emerald-500' : 'border-zinc-100 group-hover:border-zinc-950'}`}>
-                                    <p className={`text-[12px] font-bold leading-relaxed tracking-tight ${isHigh ? 'text-red-700/80' : isLow ? 'text-emerald-700' : 'text-zinc-500 group-hover:text-zinc-700'}`}>
+                                    <p className={`text-[14px] font-bold leading-relaxed tracking-tight ${isHigh ? 'text-red-700/80' : isLow ? 'text-emerald-700' : 'text-zinc-500 group-hover:text-zinc-700'}`}>
                                         {isHigh
                                             ? "Early-vulnerability detected. Deploying autonomous debt-mitigation protocol."
                                             : "Behavioral signals stable. Continuous monitoring cycle active."}

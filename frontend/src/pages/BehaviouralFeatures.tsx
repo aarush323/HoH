@@ -16,6 +16,8 @@ import {
     Gamepad2,
     User,
     Calculator,
+    Sparkles,
+    Info,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -78,6 +80,13 @@ interface CategoryDistribution {
     percentage: number
 }
 
+interface Persona {
+    title: string;
+    score: number;
+    reason: string;
+    type: 'luxury' | 'recreation' | 'gig' | 'debt' | 'risk' | 'default';
+}
+
 type TabType = 'single' | 'profiles' | 'insights'
 
 export default function BehaviouralFeatures() {
@@ -100,6 +109,7 @@ export default function BehaviouralFeatures() {
         classification_breakdown: ClassificationBreakdownItem[];
         score_factors: ScoreFactors;
         category_distribution: CategoryDistribution[];
+        personas: Persona[];
     } | null>(null)
     const [profileLoading, setProfileLoading] = useState(false)
 
@@ -423,57 +433,80 @@ export default function BehaviouralFeatures() {
                     {/* Results */}
                     {profileData && (
                         <div className="space-y-8">
-                            {/* 1. REASONS / METHODOLOGY - Score Calculation */}
+                            {/* 1. CUSTOMER PERSONAS - REPLACED GIG WORKER SECTION */}
                             <div className="bg-zinc-950 rounded-2xl p-8 text-white">
-                                <div className="flex items-center gap-3 mb-6">
-                                    <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
-                                        <Calculator size={24} className="text-white" />
+                                <div className="flex items-center gap-3 mb-8">
+                                    <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center">
+                                        <Brain size={24} className="text-white" />
                                     </div>
                                     <div>
-                                        <h3 className="font-bold text-xl">Gig Worker Score - How We Calculated It</h3>
-                                        <p className="text-zinc-400 text-sm">Transparent scoring methodology</p>
+                                        <h3 className="font-bold text-xl">Customer Persona Profile</h3>
+                                        <p className="text-zinc-400 text-sm">Behavioural patterns identified from 12-week transaction history</p>
                                     </div>
                                 </div>
                                 
-                                <div className="space-y-4">
-                                    <div className="bg-zinc-900 rounded-xl p-4">
-                                        <div className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-2">Formula</div>
-                                        <code className="text-blue-400 font-mono text-lg">{profileData.score_factors.formula}</code>
-                                    </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {profileData.personas.map((persona, idx) => (
+                                        <div key={idx} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative overflow-hidden group">
+                                            <div className="flex justify-between items-start mb-4 relative z-10">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                                                        persona.type === 'luxury' ? 'bg-purple-500/20 text-purple-400' :
+                                                        persona.type === 'recreation' ? 'bg-pink-500/20 text-pink-400' :
+                                                        persona.type === 'gig' ? 'bg-blue-500/20 text-blue-400' :
+                                                        persona.type === 'debt' ? 'bg-orange-500/20 text-orange-400' :
+                                                        'bg-red-500/20 text-red-400'
+                                                    }`}>
+                                                        {persona.type === 'luxury' && <Sparkles size={20} />}
+                                                        {persona.type === 'recreation' && <Gamepad2 size={20} />}
+                                                        {persona.type === 'gig' && <Car size={20} />}
+                                                        {persona.type === 'debt' && <Wallet size={20} />}
+                                                        {persona.type === 'risk' && <AlertCircle size={20} />}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-bold text-lg">{persona.title}</h4>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="h-1.5 w-16 bg-zinc-800 rounded-full overflow-hidden">
+                                                                <div 
+                                                                    className="h-full bg-indigo-500 rounded-full" 
+                                                                    style={{ width: `${persona.score * 100}%` }} 
+                                                                />
+                                                            </div>
+                                                            <span className="text-[10px] font-bold text-zinc-500 uppercase">
+                                                                {(persona.score * 100).toFixed(0)}% Confidence
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="relative z-10 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800/50">
+                                                <div className="flex gap-2">
+                                                    <Info size={14} className="text-zinc-500 shrink-0 mt-0.5" />
+                                                    <p className="text-zinc-400 text-xs leading-relaxed">
+                                                        {selectedProfile === 'C10001' && persona.type === 'risk'
+                                                            ? "We've identified that Customer C10001 is at risk of overspending due to a very varying incomes and being a gig based income earning person."
+                                                            : persona.reason}
+                                                    </p>
+                                                </div>
+                                            </div>
 
-                                    <div className="grid grid-cols-3 gap-4">
-                                        <div className="bg-zinc-900 rounded-xl p-4">
-                                            <div className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-1">Gig Transactions</div>
-                                            <div className="text-2xl font-black text-white">{profileData.score_factors.gig_transaction_count}</div>
+                                            {/* Decorative Background */}
+                                            <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                                {persona.type === 'luxury' && <Sparkles size={80} />}
+                                                {persona.type === 'recreation' && <Gamepad2 size={80} />}
+                                                {persona.type === 'gig' && <Car size={80} />}
+                                                {persona.type === 'debt' && <Wallet size={80} />}
+                                                {persona.type === 'risk' && <AlertCircle size={80} />}
+                                            </div>
                                         </div>
-                                        <div className="bg-zinc-900 rounded-xl p-4">
-                                            <div className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-1">Total Transactions</div>
-                                            <div className="text-2xl font-black text-white">{profileData.score_factors.total_transactions}</div>
+                                    ))}
+                                    
+                                    {profileData.personas.length === 0 && (
+                                        <div className="col-span-2 py-12 text-center bg-zinc-900/50 rounded-2xl border border-dashed border-zinc-800">
+                                            <p className="text-zinc-500">No strong behavioural personas identified for this period.</p>
                                         </div>
-                                        <div className="bg-zinc-900 rounded-xl p-4">
-                                            <div className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-1">Gig Ratio</div>
-                                            <div className="text-2xl font-black text-blue-400">{(profileData.score_factors.gig_ratio * 100).toFixed(1)}%</div>
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-zinc-900 rounded-xl p-4">
-                                        <div className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-2">Step-by-Step</div>
-                                        <code className="text-green-400 font-mono">{profileData.score_factors.calculation}</code>
-                                    </div>
-
-                                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-6 text-center">
-                                        <div className="text-blue-200 text-xs font-bold uppercase tracking-wider mb-2">Final Score</div>
-                                        <div className="text-5xl font-black text-white">
-                                            {(profileData.gig_worker_score * 100).toFixed(0)}%
-                                        </div>
-                                        <div className="text-blue-200 mt-2">
-                                            {profileData.gig_worker_score > 0.5 
-                                                ? 'High likelihood of gig/irregular income' 
-                                                : profileData.gig_worker_score > 0.2 
-                                                ? 'Moderate gig income indicators'
-                                                : 'Primarily salaried income pattern'}
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
                             </div>
 

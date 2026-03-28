@@ -11,8 +11,8 @@ load_dotenv()
 KAFKA_TOPIC = "customer-weekly-observations"
 KAFKA_BROKER = "127.0.0.1:9093"
 CSV_FILE = "pipeline/pre_delinquency_dataset.csv"
-DELAY_SECONDS = 2.0
-DEMO_CUSTOMERS = {"C10001","C00058","C10003"}
+DELAY_SECONDS = 5.0
+DEMO_CUSTOMERS = {"C10001","C00058","C00001"}
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
@@ -96,11 +96,11 @@ def run_producer(limit_customers=None):
         # Get sorted list of unique week rows
         sorted_week_rows = [unique_weeks[w] for w in sorted(unique_weeks.keys())]
 
-        # take exactly last 4
-        last_four = sorted_week_rows[-4:]
+        # take exactly last 5
+        last_five = sorted_week_rows[-5:]
         
-        print(f"[Producer] Selection for {cid}: {[r['observation_week'] for r in last_four]}")
-        final_rows.extend(last_four)
+        print(f"[Producer] Selection for {cid}: {[r['observation_week'] for r in last_five]}")
+        final_rows.extend(last_five)
 
     # Step 3: stream in order (optional but cleaner demo)
     final_rows.sort(key=lambda x: (x["customer_id"], x["observation_week"]))

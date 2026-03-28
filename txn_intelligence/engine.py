@@ -340,6 +340,75 @@ def calculate_gig_worker_score(transactions: list[dict]) -> float:
     return round(score, 2)
 
 
+def derive_personas(totals: dict, trends: dict, distribution: list[dict], gig_score: float) -> list[dict]:
+    """Identify high-level personas based on transaction patterns"""
+    personas = []
+    
+    # 1. Luxurious Lifestyle
+    lux_spend = totals.get("luxury_spend_inr", 0)
+    lux_dist = next((c for c in distribution if c["category"] == "luxury"), None)
+    lux_pct = lux_dist["percentage"] if lux_dist else 0
+    
+    if lux_spend > 25000 or lux_pct > 10:
+        score = min(1.0, (lux_spend / 100000) + (lux_pct / 40))
+        personas.append({
+            "title": "Luxurious Lifestyle",
+            "score": round(score, 2),
+            "reason": f"High luxury spending (₹{lux_spend:,.0f}) representing {lux_pct}% of transaction volume.",
+            "type": "luxury"
+        })
+
+    # 2. Recreational Spender
+    rec_spend = totals.get("recreation_spend_inr", 0)
+    rec_vel = trends.get("recreation_velocity", 0)
+    
+    if rec_spend > 5000 or rec_vel > 15:
+        score = min(1.0, (rec_spend / 30000) + (max(0, rec_vel) / 100))
+        personas.append({
+            "title": "Recreational Spender",
+            "score": round(score, 2),
+            "reason": f"Active recreation & entertainment spending with a {rec_vel}% velocity trend.",
+            "type": "recreation"
+        })
+
+    # 3. Gig Job Worker
+    if gig_score > 0.4:
+        personas.append({
+            "title": "Gig Job Worker",
+            "score": gig_score,
+            "reason": "Dominant pattern of income from on-demand platforms (Ola, Uber, etc.).",
+            "type": "gig"
+        })
+
+    # 4. Credit Reliant
+    lend_amt = totals.get("lending_app_amount_inr", 0)
+    lend_count = totals.get("lending_app_count", 0)
+    lend_vel = trends.get("lending_app_velocity", 0)
+    
+    if lend_amt > 5000 or lend_count > 2:
+        score = min(1.0, (lend_amt / 40000) + (lend_count / 8))
+        personas.append({
+            "title": "Credit Reliant",
+            "score": round(score, 2),
+            "reason": f"Frequent interaction with {lend_count} lending platforms and ₹{lend_amt:,.0f} volume.",
+            "type": "debt"
+        })
+
+    # 5. Gambler / High Risk
+    gam_spend = totals.get("gambling_lottery_spend_inr", 0)
+    gam_vel = trends.get("gambling_lottery_spend_velocity", 0)
+    if gam_spend > 0:
+        score = min(1.0, (gam_spend / 20000) + (max(0, gam_vel) / 50))
+        personas.append({
+            "title": "High Risk Speculator",
+            "score": round(score, 2),
+            "reason": f"Active participation in wagering/lottery with ₹{gam_spend:,.0f} total exposure.",
+            "type": "risk"
+        })
+
+    return personas
+
+
 def aggregate_12_weeks(transactions_by_week: dict) -> dict:
     """
     Aggregate transactions across 12 weeks with trends.
@@ -454,6 +523,9 @@ def aggregate_12_weeks(transactions_by_week: dict) -> dict:
         for cat, count in sorted(category_counts.items(), key=lambda x: -x[1])
     ]
 
+    # Derive Personas
+    personas = derive_personas(totals, trends, category_distribution, gig_worker_score)
+
     return {
         "weekly": weekly_features,
         "totals": totals,
@@ -463,6 +535,7 @@ def aggregate_12_weeks(transactions_by_week: dict) -> dict:
         "classification_breakdown": classification_breakdown,
         "score_factors": score_factors,
         "category_distribution": category_distribution,
+        "personas": personas,
     }
 
 

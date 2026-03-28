@@ -81,15 +81,21 @@ export default function CustomerDetailDashboard() {
 
     // Helper functions for risk coloring
     const getRiskTextColor = (s: number) => {
-        if (s >= 0.75) return 'text-red-500'
-        if (s >= 0.5) return 'text-amber-500'
+        if (s >= 0.7) return 'text-red-500'
+        if (s >= 0.4) return 'text-amber-500'
         return 'text-emerald-500'
     }
 
     const getRiskBgColor = (s: number) => {
-        if (s >= 0.75) return 'bg-red-50 border-red-100 text-red-600'
-        if (s >= 0.5) return 'bg-amber-50 border-amber-100 text-amber-600'
+        if (s >= 0.7) return 'bg-red-50 border-red-100 text-red-600'
+        if (s >= 0.4) return 'bg-amber-50 border-amber-100 text-amber-600'
         return 'bg-emerald-50 border-emerald-100 text-emerald-600'
+    }
+
+    const getEffectiveLevel = (s: number, level: string) => {
+        if (s >= 0.7) return 'High'
+        if (s >= 0.4) return 'Medium'
+        return level || 'Low'
     }
 
     // Chart data mapping
@@ -105,7 +111,7 @@ export default function CustomerDetailDashboard() {
             score: parseFloat(s.toFixed(2)),
             isBounce: w.auto_debit_failures > 0 || (w as any).emi_bounced_flag,
             isAmber: s >= 0.5 && s < 0.75,
-            level: s >= 0.75 ? 'High' : s >= 0.5 ? 'Medium' : 'Low',
+            level: s >= 0.7 ? 'High' : s >= 0.4 ? 'Medium' : 'Low',
             date: w.observation_week
         }
     })
@@ -152,7 +158,7 @@ export default function CustomerDetailDashboard() {
                             {score.risk_score.toFixed(2)}
                         </span>
                         <div className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${getRiskBgColor(score.risk_score)}`}>
-                            {score.risk_level} Risk
+                            {getEffectiveLevel(score.risk_score, score.risk_level)} Risk
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2 justify-end">

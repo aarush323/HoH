@@ -186,6 +186,12 @@ export const api = {
                 count: number;
                 percentage: number;
             }>;
+            personas: Array<{
+                title: string;
+                score: number;
+                reason: string;
+                type: 'luxury' | 'recreation' | 'gig' | 'debt' | 'risk' | 'default';
+            }>;
         }>('/behaviour/analyze-profile', { profile_key: profileKey }),
 };
 

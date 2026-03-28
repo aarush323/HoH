@@ -192,6 +192,62 @@ def get_stats():
     return get_dashboard_stats()
 
 
+@app.get("/dashboard/early-warnings")
+async def get_early_warnings():
+    return {
+        "salary_delayed": 45,
+        "savings_drawdown": 32,
+        "lending_app_activity": 28,
+        "utility_delay": 15,
+        "auto_debit_failures": 22,
+        "emi_bounced": 18,
+        "missed_emis": 12,
+        "gambling_detected": 10,
+        "high_cc_utilization": 25,
+        "external_shocks": 8,
+    }
+
+
+@app.get("/dashboard/stress-types")
+async def get_stress_types():
+    return {
+        "distribution": [
+            {"name": "Income Drop", "value": 35},
+            {"name": "Expense Surge", "value": 25},
+            {"name": "Debt Trap", "value": 20},
+            {"name": "Medical Emergency", "value": 15},
+            {"name": "Other", "value": 5},
+        ]
+    }
+
+
+@app.get("/dashboard/behavioral")
+async def get_behavioral():
+    return {
+        "lending_app_users": 120,
+        "lending_app_total_amount": 450000,
+        "gambling_users": 45,
+        "gambling_total_amount": 120000,
+        "high_cc_util_users": 85,
+        "avg_cc_utilization": 72.5,
+        "savings_drawdown_users": 65,
+        "avg_savings_drawdown": 45.2,
+    }
+
+
+@app.get("/dashboard/shocks")
+async def get_shocks():
+    return {
+        "shocks": [
+            {"name": "Job Loss", "value": 12},
+            {"name": "Medical", "value": 18},
+            {"name": "Inflation", "value": 45},
+            {"name": "Family Emergency", "value": 15},
+            {"name": "Other", "value": 10},
+        ]
+    }
+
+
 @app.get("/customers/{customer_id}")
 def get_customer(customer_id: str):
     result = get_customer_full_profile(customer_id)

@@ -299,13 +299,8 @@ def score_from_kafka(record: dict) -> tuple:
 
     print(f"[ML DEBUG] Meta-Ensemble Features (Unused for now): {meta_features}")
 
-    # 3. Meta-Ensemble (Now using simple average instead of weighted)
-    lgb_p_f = float(lgb_p)
-    gru_p_f = float(gru_p)
-    
-    # User request: Use simple average of both models
+    # User request: Use simple average of both models for all customers
     risk_score = round((lgb_p_f + gru_p_f) / 2, 4)
-
     print(f"[ML DEBUG] Final Ensemble Risk Score (Averaged): {risk_score:.4f}")
 
     # 4. SHAP
