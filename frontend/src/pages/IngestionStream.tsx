@@ -2,86 +2,221 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLiveFeed } from '../context/LiveFeedContext'
 import { api } from '../api/client'
-import PipelineBox from '../components/PipelineBox'
+import type { PipelineDetails, ShapFactor } from '../types'
 import {
-    Box,
+    Database,
     Shield,
     Activity,
     Phone,
-    Database,
     Zap,
     CheckCircle2,
     ArrowUpRight,
     Cpu,
-    MessageSquare,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    AlertTriangle,
+    TrendingUp,
+    TrendingDown,
+    Brain,
+    MessageSquare,
+    XCircle,
+    Sparkles
 } from 'lucide-react'
+
+/* ─── Inline Sub-components ─── */
+
+function RiskBadge({ level, score }: { level: string; score?: number }) {
+    const cfg: Record<string, { bg: string; text: string; glow: string; ring: string }> = {
+        HIGH: { bg: 'bg-red-500', text: 'text-white', glow: 'shadow-red-500/30', ring: 'ring-red-200' },
+        MEDIUM: { bg: 'bg-amber-500', text: 'text-white', glow: 'shadow-amber-500/30', ring: 'ring-amber-200' },
+        LOW: { bg: 'bg-emerald-500', text: 'text-white', glow: 'shadow-emerald-500/30', ring: 'ring-emerald-200' },
+    }
+    const c = cfg[level?.toUpperCase()] || cfg.LOW
+    return (
+        <div className={`animate-scale-pop px-5 py-2.5 rounded-2xl ${c.bg} ${c.text} shadow-xl ${c.glow} ring-2 ${c.ring} text-[11px] font-black uppercase tracking-widest flex items-center gap-2`}>
+            <Shield size={14} strokeWidth={3} />
+            {score != null ? `${(score * 100).toFixed(1)}%` : level}
+        </div>
+    )
+}
+
+function ActionBadge({ action }: { action?: string }) {
+    if (!action) return null
+    const iconMap: Record<string, string> = {
+        'voice_outreach': '📞',
+        'whatsapp_nudge': '💬',
+        'email_alert': '📧',
+        'restructure_offer': '🔄',
+    }
+    return (
+        <div className="animate-scale-pop px-4 py-2 rounded-xl bg-[#004ac6]/10 text-[#004ac6] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border border-[#004ac6]/20">
+            <span>{iconMap[action] || '⚡'}</span>
+            {action.replace(/_/g, ' ')}
+        </div>
+    )
+}
+
+function PipelineStep({ status, label, icon: Icon, isHardStop }: {
+    status: 'done' | 'active' | 'pending' | 'failed'
+    label: string
+    icon: React.ComponentType<{ size?: number; strokeWidth?: number }>
+    isHardStop?: boolean
+}) {
+    const styles = {
+        done: 'border-emerald-500 text-emerald-500 shadow-xl shadow-emerald-500/10 scale-110',
+        active: `border-[#004ac6] text-[#004ac6] scale-110 animate-glow-pulse`,
+        pending: 'border-zinc-200 text-zinc-300',
+        failed: 'border-red-600 text-red-600 shadow-xl shadow-red-500/20 animate-glow-pulse-red scale-110',
+    }
+    return (
+        <div className="flex flex-col items-center gap-3 relative z-10">
+            <div className={`w-14 h-14 rounded-2xl bg-white border-2 flex items-center justify-center transition-all duration-700 ${styles[status]}`}>
+                {status === 'done' ? <CheckCircle2 size={22} strokeWidth={3} /> :
+                    status === 'failed' ? <XCircle size={22} strokeWidth={3} /> :
+                        <Icon size={22} strokeWidth={2.5} />}
+            </div>
+            <span className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${status === 'pending' ? 'text-zinc-300' : 'text-zinc-800'}`}>
+                {label}
+            </span>
+            {isHardStop && status === 'failed' && (
+                <span className="text-[8px] font-black text-red-600 uppercase tracking-widest">BLOCKED</span>
+            )}
+        </div>
+    )
+}
+
+function FactorChip({ factor }: { factor: ShapFactor }) {
+    const isRisk = factor.direction === 'increases_risk'
+    return (
+        <div className={`animate-scale-pop flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all ${isRisk
+            ? 'bg-red-50/80 border-red-100 text-red-700'
+            : 'bg-emerald-50/80 border-emerald-100 text-emerald-700'
+            }`}>
+            {isRisk
+                ? <TrendingUp size={16} strokeWidth={3} className="text-red-500" />
+                : <TrendingDown size={16} strokeWidth={3} className="text-emerald-500" />
+            }
+            <span className="text-[11px] font-bold tracking-tight">{factor.feature.replace(/_/g, ' ')}</span>
+            <span className={`text-[10px] font-black ml-auto ${isRisk ? 'text-red-500' : 'text-emerald-500'}`}>
+                {isRisk ? '+' : '-'}{Math.abs(factor.contribution).toFixed(3)}
+            </span>
+        </div>
+    )
+}
+
+function ModelBar({ label, value, color }: { label: string; value?: number; color: string }) {
+    const pct = value != null ? value * 100 : 0
+    return (
+        <div className="flex-1">
+            <div className="flex justify-between items-baseline mb-2">
+                <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{label}</span>
+                <span className="text-lg font-black text-zinc-950 tabular-nums">{pct.toFixed(1)}%</span>
+            </div>
+            <div className="h-3 bg-zinc-100 rounded-full overflow-hidden">
+                <div
+                    className={`h-full rounded-full animate-bar-fill ${color}`}
+                    style={{ width: `${Math.min(pct, 100)}%` }}
+                />
+            </div>
+        </div>
+    )
+}
+
+function SeverityDot({ level }: { level?: string }) {
+    const colors: Record<string, string> = {
+        high: 'bg-red-500',
+        medium: 'bg-amber-500',
+        low: 'bg-emerald-500',
+        critical: 'bg-red-700',
+    }
+    const c = colors[level?.toLowerCase() || 'low'] || 'bg-zinc-300'
+    return (
+        <div className="flex items-center gap-2">
+            <div className={`w-2.5 h-2.5 rounded-full ${c}`} />
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{level || 'N/A'}</span>
+        </div>
+    )
+}
+
+function generateDecisionSummary(details: PipelineDetails): string {
+    const topFactor = details.top_factors?.[0]
+    const stressType = details.stress_context?.stress_type
+    const method = details.intervention?.method
+
+    const parts: string[] = []
+    if (topFactor) {
+        const dir = topFactor.direction === 'increases_risk' ? 'elevated' : 'reduced'
+        parts.push(`${topFactor.feature.replace(/_/g, ' ')} ${dir}`)
+    }
+    if (stressType) parts.push(stressType.replace(/_/g, ' '))
+    const cause = parts.length > 0 ? parts.join(' + ') : 'behavioral signals detected'
+    const action = method ? method.replace(/_/g, ' ') : 'monitoring'
+
+    return `Risk driven by ${cause} → ${action} triggered`
+}
+
+/* ─── Main Component ─── */
 
 export default function IngestionStream() {
     const navigate = useNavigate()
     const { connected: contextConnected, pipelineDetails } = useLiveFeed()
     const [isSimulating, setIsSimulating] = useState(false)
-    const [detailsExpanded, setDetailsExpanded] = useState(true)
+    const [debugExpanded, setDebugExpanded] = useState(false)
 
-    // New state for transaction-by-transaction live feed
+    // SSE-driven live state
     const [activeCustomerId, setActiveCustomerId] = useState<string | null>(null)
     const [activeCustomerStages, setActiveCustomerStages] = useState<any[]>([])
     const [stats, setStats] = useState({ totalRecords: 0, detectedRisk: 0 })
 
     useEffect(() => {
-        const es = new EventSource('/api/stream');
+        const es = new EventSource('/api/stream')
 
         es.onmessage = (e) => {
             try {
-                const event = JSON.parse(e.data);
+                const event = JSON.parse(e.data)
 
-                // Handle legacy "refresh" event
                 if (event.customers) {
                     setStats({
                         totalRecords: event.total_events || 0,
-                        detectedRisk: event.customers.filter((c: any) => c.risk_level === 'High').length
-                    });
-                    return;
+                        detectedRisk: event.customers.filter((c: any) => c.risk_level === 'High').length,
+                    })
+                    return
                 }
 
-                // Handle granular events
-                if (event.stage === "CUSTOMER_DONE") {
-                    setActiveCustomerId(null);
-                    setActiveCustomerStages([]);
-                    return;
+                if (event.stage === 'CUSTOMER_DONE') {
+                    setActiveCustomerId(null)
+                    setActiveCustomerStages([])
+                    return
                 }
 
-                if (event.stage === "SKIPPED") {
-                    return; // Ignore skipped transactions on UI
-                }
+                if (event.stage === 'SKIPPED') return
 
                 setActiveCustomerId(prevId => {
                     if (event.customer_id !== prevId) {
-                        setActiveCustomerStages([event]);
-                        return event.customer_id;
+                        setActiveCustomerStages([event])
+                        return event.customer_id
                     } else {
-                        setActiveCustomerStages(prev => [...prev, event]);
-                        return prevId;
+                        setActiveCustomerStages(prev => [...prev, event])
+                        return prevId
                     }
-                });
+                })
 
-                if (event.stage === "OUTREACH" && event.global_risk === "HIGH") {
-                    setStats(prev => ({ ...prev, detectedRisk: prev.detectedRisk + 1 }));
+                if (event.stage === 'OUTREACH' && event.global_risk === 'HIGH') {
+                    setStats(prev => ({ ...prev, detectedRisk: prev.detectedRisk + 1 }))
                 }
             } catch (err) {
-                console.error('SSE Error:', err);
+                console.error('SSE Error:', err)
             }
-        };
+        }
 
-        return () => es.close();
+        return () => es.close()
     }, [])
 
-    const stages = [
-        { name: 'INGEST', icon: Database, color: 'text-blue-500' },
-        { name: 'SCORE', icon: Shield, color: 'text-indigo-500' },
-        { name: 'ANALYSE', icon: Activity, color: 'text-purple-500' },
-        { name: 'OUTREACH', icon: Phone, color: 'text-emerald-500' }
+    const stagesDef = [
+        { name: 'INGEST', icon: Database },
+        { name: 'SCORE', icon: Shield },
+        { name: 'ANALYSE', icon: Activity },
+        { name: 'OUTREACH', icon: Phone },
     ]
 
     const handleStartSimulation = async () => {
@@ -95,24 +230,30 @@ export default function IngestionStream() {
         }
     }
 
-    // Map stages to progress number
     const getProgress = (stages: any[]) => {
-        if (stages.some(s => s.stage === "OUTREACH")) return 4;
-        if (stages.some(s => s.stage === "ANALYSE")) return 3;
-        if (stages.some(s => s.stage === "SCORE")) return 2;
-        if (stages.some(s => s.stage === "INGEST" || s.stage === "INGEST_TRIGGERED")) return 1;
-        return 0;
+        if (stages.some(s => s.stage === 'OUTREACH')) return 4
+        if (stages.some(s => s.stage === 'ANALYSE')) return 3
+        if (stages.some(s => s.stage === 'SCORE')) return 2
+        if (stages.some(s => s.stage === 'INGEST' || s.stage === 'INGEST_TRIGGERED')) return 1
+        return 0
     }
 
-    const latestEvent = activeCustomerStages[activeCustomerStages.length - 1];
-    const riskLevel = latestEvent?.global_risk || "Low";
-    const progress = getProgress(activeCustomerStages);
+    const latestEvent = activeCustomerStages[activeCustomerStages.length - 1]
+    const riskLevel = latestEvent?.global_risk || 'LOW'
+    const progress = getProgress(activeCustomerStages)
+    const isHigh = riskLevel === 'HIGH'
+
+    // Get pipeline details for active customer
+    const details: PipelineDetails | null = activeCustomerId ? pipelineDetails[activeCustomerId] || null : null
+    const hasHardStop = details?.compliance?.hard_stop === true
 
     return (
         <div className="animate-fade-in pb-32 max-w-[1400px] mx-auto px-6 font-sans text-zinc-900 leading-tight">
 
-            {/* 1. Header Section */}
-            <div className="pt-20 mb-12 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+            {/* ══════════════════════════════════════════════════════════════
+                SECTION 1: HEADER
+            ══════════════════════════════════════════════════════════════ */}
+            <div className="pt-16 mb-12 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
                 <div className="space-y-4">
                     <div className="flex items-center gap-3">
                         <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 ${contextConnected ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-red-50 text-red-600 border border-red-100'}`}>
@@ -120,242 +261,315 @@ export default function IngestionStream() {
                             {contextConnected ? 'Network Active' : 'Disconnected'}
                         </div>
                         <div className="px-4 py-1.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800 text-[10px] font-black uppercase tracking-widest">
-                            {stats.totalRecords.toLocaleString()} Total Records
+                            {stats.totalRecords.toLocaleString()} Records
                         </div>
+                        {stats.detectedRisk > 0 && (
+                            <div className="px-4 py-1.5 rounded-full bg-red-500 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-scale-pop shadow-lg shadow-red-500/20">
+                                <AlertTriangle size={12} strokeWidth={3} />
+                                {stats.detectedRisk} High Risk
+                            </div>
+                        )}
                     </div>
-                    <h1 className="text-7xl font-black tracking-tight text-zinc-950 leading-none">
+                    <h1 className="text-6xl font-black tracking-tight text-zinc-950 leading-none">
                         Real-time <span className="text-[#004ac6]">Live Feed</span>
                     </h1>
+                    <p className="text-sm text-zinc-400 font-medium">Barclays Pre-Delinquency Intelligence Pipeline</p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-5">
-                    {/* Live Stats Pill */}
-                    <div className="flex items-center gap-8 px-10 h-24 bg-white rounded-[2.5rem] border border-zinc-100 shadow-2xl shadow-zinc-200/50">
-                        <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-1">Monitoring</span>
-                            <span className="text-3xl font-black text-zinc-950 tabular-nums">{activeCustomerId ? 1 : 0}</span>
-                        </div>
-                        <div className="w-px h-12 bg-zinc-100" />
-                        <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-1">Detected Risk</span>
+                <button
+                    onClick={handleStartSimulation}
+                    disabled={isSimulating}
+                    className={`group flex items-center gap-4 h-16 px-12 rounded-2xl text-xs font-black tracking-[0.2em] uppercase transition-all overflow-hidden relative ${isSimulating
+                        ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                        : 'bg-[#004ac6] text-white hover:bg-zinc-950 active:scale-95 shadow-2xl shadow-blue-600/30 hover:shadow-zinc-950/30'}`}
+                >
+                    <Zap fill={isSimulating ? 'none' : 'currentColor'} size={18} className={isSimulating ? 'animate-pulse' : 'group-hover:rotate-12 transition-all'} />
+                    {isSimulating ? 'Processing...' : 'Stream Data'}
+                </button>
+            </div>
+
+            {/* ══════════════════════════════════════════════════════════════
+                EMPTY STATE
+            ══════════════════════════════════════════════════════════════ */}
+            {!activeCustomerId ? (
+                <div className="py-48 bg-zinc-50/50 rounded-[4rem] border border-dashed border-zinc-200 flex flex-col items-center justify-center text-center">
+                    <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center mb-8 border border-zinc-100 shadow-xl shadow-zinc-200/50">
+                        <Cpu size={40} className="text-zinc-200 animate-pulse" />
+                    </div>
+                    <h3 className="text-xl font-black text-zinc-300 uppercase tracking-[0.3em] mb-4">No Live Events Yet</h3>
+                    <p className="text-zinc-400 font-medium max-w-sm px-10 leading-relaxed">
+                        Start the stream to begin processing real-time customer behavioral signals.
+                    </p>
+                </div>
+            ) : (
+                <div className="space-y-8 animate-slide-in-card">
+
+                    {/* ══════════════════════════════════════════════════════════════
+                        SECTION 1.5: CUSTOMER IDENTITY + BADGES
+                    ══════════════════════════════════════════════════════════════ */}
+                    <div className="bg-white rounded-[2.5rem] p-8 border border-zinc-100 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-6">
+                                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all shadow-sm ${isHigh ? 'bg-red-50 text-red-500' : 'bg-zinc-50 text-zinc-400'}`}>
+                                    <Database size={24} />
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-black tracking-tight text-zinc-950">{activeCustomerId}</h2>
+                                    <p className="text-sm text-zinc-400 font-medium mt-1">Week {latestEvent?.week || '—'} • {latestEvent?.archetype || 'Processing...'}</p>
+                                </div>
+                            </div>
                             <div className="flex items-center gap-3">
-                                <span className={`text-3xl font-black tabular-nums ${stats.detectedRisk > 0 ? 'text-red-500' : 'text-zinc-950'}`}>
-                                    {stats.detectedRisk}
-                                </span>
-                                {stats.detectedRisk > 0 && <Activity className="text-red-500 animate-pulse" size={24} />}
+                                <RiskBadge level={riskLevel} score={latestEvent?.risk_score} />
+                                {details && <ActionBadge action={details.intervention?.method} />}
                             </div>
                         </div>
                     </div>
 
-                    <button
-                        onClick={handleStartSimulation}
-                        disabled={isSimulating}
-                        className={`group flex items-center gap-4 h-24 px-12 rounded-[2.5rem] text-xs font-black tracking-[0.2em] uppercase transition-all overflow-hidden relative ${isSimulating
-                            ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
-                            : 'bg-[#004ac6] text-white hover:bg-zinc-950 active:scale-95 shadow-2xl shadow-blue-600/30 hover:shadow-zinc-950/30'}`}
-                    >
-                        <Zap fill={isSimulating ? 'none' : 'currentColor'} size={18} className={isSimulating ? 'animate-pulse' : 'group-hover:rotate-12 transition-all'} />
-                        {isSimulating ? 'Processing...' : 'Stream Data'}
-                    </button>
-                </div>
-            </div>
-
-            {/* 2. Pipeline Stream Container */}
-            <div className="relative space-y-6">
-                {/* Visual Lineage Decoration */}
-                <div className="absolute left-[3.25rem] top-0 bottom-0 w-px bg-gradient-to-b from-blue-500/20 via-zinc-100 to-transparent -z-10" />
-
-                {!activeCustomerId ? (
-                    <div className="py-48 bg-zinc-50/50 rounded-[4rem] border border-dashed border-zinc-200 flex flex-col items-center justify-center text-center">
-                        <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center mb-8 border border-zinc-100 shadow-xl shadow-zinc-200/50">
-                            <Cpu size={40} className="text-zinc-200 animate-pulse" />
-                        </div>
-                        <h3 className="text-xl font-black text-zinc-300 uppercase tracking-[0.3em] mb-4">Signal Awaited</h3>
-                        <p className="text-zinc-400 font-medium max-w-sm px-10 leading-relaxed capitalize">
-                            Initiate session to begin processing real-time customer behavioral signals.
-                        </p>
-                    </div>
-                ) : (() => {
-                    const isHigh = riskLevel === 'HIGH';
-                    const isMedium = riskLevel === 'MEDIUM';
-                    const latestAgentEv = [...activeCustomerStages].reverse().find(ev => ev.agent_result?.message_content);
-                    const message = latestAgentEv?.agent_result?.message_content;
-
-                    return (
-                        <div className="flex flex-col gap-10 w-full animate-in fade-in duration-1000">
+                    {/* ══════════════════════════════════════════════════════════════
+                        SECTION 2: PIPELINE TIMELINE
+                    ══════════════════════════════════════════════════════════════ */}
+                    <div className="bg-white rounded-[2.5rem] p-10 border border-zinc-100 shadow-sm">
+                        <div className="flex items-center justify-between w-full max-w-3xl mx-auto relative px-4">
+                            {/* Background track */}
+                            <div className="absolute inset-x-8 top-7 h-1 bg-zinc-100 -z-0 rounded-full" />
+                            {/* Progress fill */}
                             <div
-                                key={activeCustomerId}
-                                className={`group relative bg-white flex flex-col p-10 rounded-[4rem] border border-zinc-100 transition-all duration-700 hover:border-zinc-300 hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.08)] hover:-translate-y-1.5 ${isHigh ? 'border-red-100 bg-red-50/5' : ''}`}
-                            >
-                                <div className="flex items-center w-full">
-                                    {/* Active Link Animated Node */}
-                                    <div className="absolute -left-3 top-1/2 -translate-y-1/2 hidden lg:flex">
-                                        <div className={`w-7 h-7 rounded-full border-[6px] border-[#f9f9f9] shadow-xl ${isHigh ? 'bg-red-500' : 'bg-[#004ac6]'} animate-node-pulse`} />
+                                className={`absolute left-8 top-7 h-1 transition-all duration-1000 ease-out rounded-full -z-0 ${hasHardStop ? 'bg-red-500/40' : isHigh ? 'bg-red-500/30' : 'bg-emerald-500/30'}`}
+                                style={{ width: `${((Math.max(progress, 1) - 1) / (stagesDef.length - 1)) * 92}%` }}
+                            />
+
+                            {stagesDef.map((S, si) => {
+                                const stepIdx = si + 1
+                                const isDone = stepIdx < progress
+                                const isCurrent = stepIdx === progress
+                                const isPending = stepIdx > progress
+                                const isFailed = S.name === 'OUTREACH' && hasHardStop && (isDone || isCurrent)
+
+                                let status: 'done' | 'active' | 'pending' | 'failed' = 'pending'
+                                if (isFailed) status = 'failed'
+                                else if (isDone) status = 'done'
+                                else if (isCurrent) status = 'active'
+
+                                return (
+                                    <PipelineStep
+                                        key={si}
+                                        status={status}
+                                        label={S.name}
+                                        icon={S.icon}
+                                        isHardStop={hasHardStop}
+                                    />
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    {/* ══════════════════════════════════════════════════════════════
+                        SECTION 3: DECISION SUMMARY LINE (wow factor)
+                    ══════════════════════════════════════════════════════════════ */}
+                    {details && (
+                        <div className={`rounded-2xl px-8 py-5 flex items-center gap-4 animate-scale-pop ${isHigh
+                            ? 'bg-red-50 border border-red-100 text-red-800'
+                            : 'bg-[#004ac6]/5 border border-[#004ac6]/10 text-[#004ac6]'
+                            }`}>
+                            <Sparkles size={18} strokeWidth={2.5} className="shrink-0" />
+                            <p className="text-sm font-bold tracking-tight leading-snug">
+                                {generateDecisionSummary(details)}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* ══════════════════════════════════════════════════════════════
+                        SECTION 4+5: WHY THIS HAPPENED + MODEL INSIGHT (side-by-side)
+                    ══════════════════════════════════════════════════════════════ */}
+                    {details && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                            {/* WHY THIS HAPPENED */}
+                            <div className="bg-white rounded-[2.5rem] p-8 border border-zinc-100 shadow-sm">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="w-10 h-10 rounded-xl bg-zinc-50 flex items-center justify-center">
+                                        <Brain size={20} className="text-zinc-400" />
                                     </div>
+                                    <h3 className="text-sm font-black text-zinc-900 uppercase tracking-widest">Why This Happened</h3>
+                                </div>
 
-                                    {/* Identity Block */}
-                                    <div className="w-[20%] flex items-center gap-6 border-r border-zinc-50 pr-8 shrink-0">
-                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-sm ${isHigh ? 'bg-red-50 text-red-500' : 'bg-zinc-50 text-zinc-400 group-hover:bg-[#004ac6] group-hover:text-white group-hover:scale-105'}`}>
-                                            <Box size={22} />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="text-xl font-black text-zinc-950 tracking-tighter truncate leading-tight">
-                                                {activeCustomerId}
-                                            </div>
-                                            <div className="text-[12px] font-bold text-zinc-500 mt-1 uppercase tracking-wider">
-                                                {latestEvent?.week || 'Unknown Date'}
-                                            </div>
-                                            <div className="flex flex-wrap gap-1.5 mt-3">
-                                                <div className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-0.5 bg-zinc-50 border border-zinc-100 rounded-md">
-                                                    {latestEvent?.archetype || 'N/A'}
-                                                </div>
-                                            </div>
-                                        </div>
+                                {details.top_factors && details.top_factors.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {details.top_factors.slice(0, 3).map((f, i) => (
+                                            <FactorChip key={i} factor={f} />
+                                        ))}
                                     </div>
+                                ) : (
+                                    <p className="text-sm text-zinc-400 italic">Awaiting SHAP analysis...</p>
+                                )}
+                            </div>
 
-                                    {/* Continuous Pipeline Visualisation */}
-                                    <div className="flex-1 flex flex-col justify-center px-16 relative">
-                                        <div className="flex items-center justify-between w-full max-w-3xl mx-auto relative px-4">
-
-                                            {/* Dynamic Progress Line (The Continuous Strand) */}
-                                            <div className="absolute inset-x-8 top-6 h-1 bg-zinc-50 -z-0 rounded-full" />
-                                            <div
-                                                className={`absolute left-8 top-6 h-1 transition-all duration-1000 ease-out rounded-full -z-0 ${isHigh ? 'bg-red-500/30' : 'bg-blue-500/20'}`}
-                                                style={{ width: `${((progress - 1) / (stages.length - 1)) * 92}%` }}
-                                            />
-
-                                            {stages.map((S, si) => {
-                                                const stepIdx = si + 1;
-                                                const isDone = stepIdx <= progress;
-                                                const isCurrent = stepIdx === progress;
-
-                                                const stageEvent = [...activeCustomerStages].reverse().find(ev => ev.stage === S.name);
-                                                const stageDataMap: Record<string, string | null> = {
-                                                    'SCORE': stageEvent?.risk_score ? `ML: ${(stageEvent.risk_score * 100).toFixed(4)}%` : null,
-                                                    'ANALYSE': stageEvent?.triggered !== undefined ? `Rules: ${stageEvent.triggered ? 'Triggered' : 'Normal'}` : null,
-                                                    'OUTREACH': null,
-                                                };
-                                                const stageData = stageDataMap[S.name];
-
-                                                return (
-                                                    <div key={si} className={`flex flex-col items-center gap-4 relative z-10 group/stage`}>
-                                                        <div className={`w-12 h-12 rounded-2xl bg-white border-2 flex items-center justify-center transition-all duration-700 ${isDone
-                                                            ? isHigh && si >= 2 ? 'border-red-500 text-red-500 shadow-xl shadow-red-500/10 scale-110' : 'border-emerald-500 text-emerald-500 shadow-xl shadow-emerald-500/10 scale-110'
-                                                            : isCurrent
-                                                                ? 'border-[#004ac6] text-[#004ac6] animate-pulse scale-110 shadow-xl shadow-blue-500/10'
-                                                                : 'border-zinc-100 text-zinc-100 grayscale opacity-40'
-                                                            }`}>
-                                                            {isDone ? <CheckCircle2 size={20} strokeWidth={3} /> : <S.icon size={20} strokeWidth={2.5} />}
-                                                        </div>
-
-                                                        <div className="flex flex-col items-center text-center">
-                                                            <span className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-500 ${isDone ? 'text-zinc-900 opacity-100' : 'text-zinc-200 opacity-50'}`}>
-                                                                {S.name}
-                                                            </span>
-                                                            {isDone && stageData && (
-                                                                <span className="text-[9px] font-bold text-blue-600 mt-1 uppercase tracking-tight animate-fade-in">
-                                                                    {stageData}
-                                                                </span>
-                                                            )}
-                                                        </div>
-
-                                                        {/* Intelligent Data Tooltip */}
-                                                        <div className="absolute -top-14 left-1/2 -translate-x-1/2 bg-zinc-900 text-white px-4 py-2 rounded-xl text-[9px] font-black tracking-[0.1em] uppercase opacity-0 group-hover/stage:opacity-100 transition-all pointer-events-none whitespace-nowrap shadow-2xl scale-90 group-hover/stage:scale-100 translate-y-2 group-hover/stage:translate-y-0 z-50">
-                                                            {isDone
-                                                                ? stageEvent?.agent_result?.message_content
-                                                                    ? `Agent: ${stageEvent.agent_result.message_content.substring(0, 40)}...`
-                                                                    : `${S.name} Complete`
-                                                                : isCurrent ? `Processing ${S.name}...` : `Queue for ${S.name}`
-                                                            }
-                                                            <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-zinc-900 rotate-45" />
-                                                        </div>
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
+                            {/* MODEL INSIGHT */}
+                            <div className="bg-white rounded-[2.5rem] p-8 border border-zinc-100 shadow-sm">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="w-10 h-10 rounded-xl bg-zinc-50 flex items-center justify-center">
+                                        <Activity size={20} className="text-zinc-400" />
                                     </div>
+                                    <h3 className="text-sm font-black text-zinc-900 uppercase tracking-widest">Model Insight</h3>
+                                </div>
 
-                                    {/* Risk & Insight Section */}
-                                    <div className="lg:w-[22%] flex items-center justify-end gap-10 border-l border-zinc-50 pl-10 shrink-0">
-                                        <div className="flex flex-col items-end">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <span className="text-[10px] font-black text-zinc-300 uppercase tracking-widest">Global Risk</span>
-                                            </div>
-                                            <div className={`px-5 py-2 rounded-2xl text-[11px] font-black uppercase tracking-widest text-white shadow-xl ${isHigh ? 'bg-red-500 shadow-red-500/20' : isMedium ? 'bg-amber-500 shadow-amber-500/20' : 'bg-emerald-500 shadow-emerald-500/20'
-                                                }`}>
-                                                {latestEvent?.risk_score ? `${(latestEvent.risk_score * 100).toFixed(4)}%` : riskLevel}
-                                            </div>
-                                        </div>
-
-                                        <button
-                                            onClick={() => navigate(`/customer/${activeCustomerId}`)}
-                                            className="w-16 h-16 bg-zinc-50 rounded-[1.75rem] flex items-center justify-center text-zinc-400 hover:bg-[#004ac6] hover:text-white transition-all hover:scale-110 active:scale-95 border border-zinc-100 group/btn shadow-sm"
-                                        >
-                                            <ArrowUpRight size={26} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
-                                        </button>
+                                <div className="space-y-5">
+                                    <ModelBar label="LightGBM" value={details.lgb_p} color="bg-[#004ac6]" />
+                                    <ModelBar label="GRU Neural" value={details.gru_p} color="bg-purple-500" />
+                                    <div className="pt-4 border-t border-zinc-100 flex justify-between items-baseline">
+                                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Ensemble Score</span>
+                                        <span className={`text-3xl font-black tabular-nums ${(details.ensemble_score || 0) >= 0.5 ? 'text-red-500' : 'text-zinc-950'}`}>
+                                            {details.ensemble_score != null ? `${(details.ensemble_score * 100).toFixed(1)}%` : '—'}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    )}
 
-                            {/* Standalone Outreach Message Box */}
-                            {message && (
-                                <div className="bg-white rounded-[4rem] p-12 border border-blue-100 shadow-2xl animate-in fade-in slide-in-from-top-10 duration-1000 ring-4 ring-blue-50/30">
-                                    <div className="flex items-center gap-6 mb-10">
-                                        <div className="w-16 h-16 rounded-[1.75rem] bg-[#004ac6] text-white flex items-center justify-center shadow-2xl shadow-blue-500/20">
-                                            <MessageSquare size={28} strokeWidth={2.5} />
+                    {/* ══════════════════════════════════════════════════════════════
+                        SECTION 6: STRESS CONTEXT NARRATIVE + INTERVENTION (side-by-side)
+                    ══════════════════════════════════════════════════════════════ */}
+                    {details && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                            {/* STRESS CONTEXT */}
+                            {details.stress_context && details.stress_context.narrative ? (
+                                <div className="bg-white rounded-[2.5rem] p-8 border border-zinc-100 shadow-sm">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                                            <AlertTriangle size={20} className="text-amber-500" />
                                         </div>
                                         <div>
-                                            <div className="text-[10px] font-black text-[#004ac6] uppercase tracking-[0.5em] mb-1.5 opacity-60">Live Intervention Log</div>
-                                            <div className="text-2xl font-black text-zinc-950 tracking-tight">Outreach Msg</div>
+                                            <h3 className="text-sm font-black text-zinc-900 uppercase tracking-widest">Stress Context</h3>
+                                            <SeverityDot level={details.stress_context.severity} />
                                         </div>
-                                        <div className="h-px flex-1 bg-zinc-50"></div>
                                     </div>
-                                    <div className="text-3xl font-bold text-zinc-900 leading-[1.15] italic bg-blue-50/20 p-12 rounded-[3.5rem] border border-blue-100/50 border-dashed shadow-inner tracking-tight">
-                                        "{message}"
+                                    <p className="text-[13px] text-zinc-700 font-medium leading-relaxed mb-5">
+                                        {details.stress_context.narrative}
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        {details.stress_context.stress_type && (
+                                            <span className="px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest border border-amber-100">
+                                                {details.stress_context.stress_type.replace(/_/g, ' ')}
+                                            </span>
+                                        )}
                                     </div>
+                                </div>
+                            ) : (
+                                <div className="bg-white rounded-[2.5rem] p-8 border border-zinc-100 shadow-sm flex items-center justify-center">
+                                    <p className="text-sm text-zinc-300 italic">Stress analysis pending...</p>
+                                </div>
+                            )}
+
+                            {/* INTERVENTION DECISION */}
+                            <div className={`rounded-[2.5rem] p-8 border shadow-sm ${hasHardStop
+                                ? 'bg-red-50/50 border-red-200'
+                                : 'bg-white border-zinc-100'
+                                }`}>
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${hasHardStop ? 'bg-red-100' : 'bg-[#004ac6]/10'}`}>
+                                        <MessageSquare size={20} className={hasHardStop ? 'text-red-600' : 'text-[#004ac6]'} />
+                                    </div>
+                                    <h3 className="text-sm font-black text-zinc-900 uppercase tracking-widest">Intervention Decision</h3>
+                                </div>
+
+                                {/* Hard stop alert */}
+                                {hasHardStop && (
+                                    <div className="mb-5 px-5 py-4 rounded-2xl bg-red-600 text-white flex items-center gap-3 animate-scale-pop shadow-lg shadow-red-600/30">
+                                        <XCircle size={18} strokeWidth={3} />
+                                        <div>
+                                            <div className="text-[10px] font-black uppercase tracking-widest opacity-70">Hard Stop</div>
+                                            <div className="text-sm font-bold">{details?.compliance?.hard_stop_reason || 'Compliance block active'}</div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">Method</div>
+                                        <div className="text-lg font-black text-zinc-950">
+                                            {details?.intervention?.method?.replace(/_/g, ' ') || '—'}
+                                        </div>
+                                    </div>
+                                    {details?.intervention?.justification && (
+                                        <div>
+                                            <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">Justification</div>
+                                            <p className="text-[13px] text-zinc-600 font-medium leading-relaxed">
+                                                {details.intervention.justification}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {details?.intervention?.channel && (
+                                        <div className="pt-3 border-t border-zinc-100">
+                                            <span className="px-3 py-1.5 rounded-xl bg-zinc-100 text-zinc-600 text-[10px] font-black uppercase tracking-widest">
+                                                Channel: {details.intervention.channel}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ══════════════════════════════════════════════════════════════
+                        SECTION 7: EXPANDABLE DEBUG (full pipeline details)
+                    ══════════════════════════════════════════════════════════════ */}
+                    {details && (
+                        <div className="bg-white rounded-[2.5rem] border border-zinc-100 shadow-sm overflow-hidden">
+                            <button
+                                onClick={() => setDebugExpanded(!debugExpanded)}
+                                className="w-full flex items-center justify-between px-8 py-5 text-xs font-black uppercase tracking-widest text-zinc-400 hover:text-zinc-900 transition-colors hover:bg-zinc-50/50"
+                            >
+                                <span>Full Pipeline Details</span>
+                                {debugExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
+                            {debugExpanded && (
+                                <div className="px-8 pb-8 animate-fade-in">
+                                    <pre className="bg-zinc-950 text-emerald-400 p-6 rounded-2xl text-xs font-mono overflow-auto max-h-[400px] leading-relaxed">
+                                        {JSON.stringify(details, null, 2)}
+                                    </pre>
                                 </div>
                             )}
                         </div>
-                    );
-                })()}
-            </div>
-
-            {/* Customer Details Section */}
-            {Object.keys(pipelineDetails).length > 0 && (
-                <div className="mt-16">
-                    <button
-                        onClick={() => setDetailsExpanded(!detailsExpanded)}
-                        className="flex items-center gap-2 mb-6 text-xs font-black uppercase tracking-widest text-zinc-400 hover:text-zinc-900 transition-colors"
-                    >
-                        {detailsExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                        CUSTOMER DETAILS
-                    </button>
-
-                    {detailsExpanded && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {Object.entries(pipelineDetails).map(([customerId, details]) => (
-                                <PipelineBox key={customerId} customerId={customerId} details={details} />
-                            ))}
-                        </div>
                     )}
+
+                    {/* Navigate button */}
+                    <div className="flex items-center gap-4 justify-end">
+                        <button
+                            onClick={() => navigate(`/journey/${activeCustomerId}`)}
+                            className="flex items-center gap-3 h-14 px-8 bg-zinc-950 text-white rounded-2xl text-[10px] font-bold tracking-[.15em] uppercase hover:bg-[#004ac6] transition-all active:scale-95 shadow-xl"
+                        >
+                            Watch Full Journey
+                            <ArrowUpRight size={16} strokeWidth={3} />
+                        </button>
+                        <button
+                            onClick={() => navigate(`/customer/${activeCustomerId}`)}
+                            className="h-14 px-8 bg-zinc-50 text-zinc-500 rounded-2xl text-[10px] font-bold tracking-[.15em] uppercase hover:bg-zinc-950 hover:text-white transition-all border border-zinc-100"
+                        >
+                            View Profile
+                        </button>
+                    </div>
                 </div>
             )}
 
-            {/* Glossy Visual Legend */}
-            <div className="fixed bottom-12 left-1/2 -translate-x-1/2 px-12 py-5 glass-card rounded-[2.5rem] flex items-center gap-10 z-50 animate-fade-in-up border border-white/40 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.1)]">
-                <div className="flex items-center gap-3.5">
+            {/* ══════════════════════════════════════════════════════════════
+                FLOATING LEGEND
+            ══════════════════════════════════════════════════════════════ */}
+            <div className="fixed bottom-10 left-1/2 -translate-x-1/2 px-10 py-4 glass-card rounded-[2rem] flex items-center gap-8 z-50 animate-fade-in-up border border-white/40 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.1)]">
+                <div className="flex items-center gap-3">
                     <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/20" />
-                    <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Stage Verified</span>
+                    <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Complete</span>
                 </div>
-                <div className="flex items-center gap-3.5">
-                    <div className="w-3 h-3 rounded-full bg-[#004ac6] shadow-lg shadow-blue-500/20" />
-                    <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Current Stream</span>
+                <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-[#004ac6] shadow-lg shadow-blue-500/20 animate-pulse" />
+                    <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Processing</span>
                 </div>
-                <div className="flex items-center gap-3.5">
+                <div className="flex items-center gap-3">
                     <div className="w-3 h-3 rounded-full bg-red-500 shadow-lg shadow-red-500/20" />
-                    <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Alert Status</span>
+                    <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Hard Stop</span>
                 </div>
             </div>
         </div>
-    );
+    )
 }
