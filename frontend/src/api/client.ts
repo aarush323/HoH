@@ -37,6 +37,39 @@ export const api = {
     getCustomersAll: () => get<CustomerDetail[]>('/customers/all'),
     getCustomersVoice: () => get<VoiceCustomer[]>('/customers/voice'),
     getDashboardStats: () => get<DashboardStats>('/dashboard/stats'),
+    getEarlyWarnings: () => get<{
+        salary_delayed: number;
+        savings_drawdown: number;
+        lending_app_activity: number;
+        utility_delay: number;
+        auto_debit_failures: number;
+        emi_bounced: number;
+        missed_emis: number;
+        gambling_detected: number;
+        high_cc_utilization: number;
+        external_shocks: number;
+    }>('/dashboard/early-warnings'),
+    getStressTypes: () => get<{ distribution: Array<{ name: string; value: number }> }>('/dashboard/stress-types'),
+    getBehavioral: () => get<{
+        lending_app_users: number;
+        lending_app_total_amount: number;
+        gambling_users: number;
+        gambling_total_amount: number;
+        high_cc_util_users: number;
+        avg_cc_utilization: number;
+        savings_drawdown_users: number;
+        avg_savings_drawdown: number;
+    }>('/dashboard/behavioral'),
+    getShocks: () => get<{ shocks: Array<{ name: string; value: number }> }>('/dashboard/shocks'),
+    getRiskTrend: () => get<{
+        trend: Array<{
+            week: string;
+            avg_risk_score: number;
+            customer_count: number;
+            high_risk_count: number;
+            medium_risk_count: number;
+        }>;
+    }>('/dashboard/risk-trend'),
     getCustomer: (id: string) => get<CustomerFullProfile>(`/customers/${id}`),
     getScore: (id: string) => get<ScoreResponse>(`/score/${id}`),
     intervene: (id: string) => post<InterveneResponse>(`/intervene/${id}`),

@@ -52,7 +52,7 @@ export default function ApprovalQueue() {
             setActionLoading(id)
             const result = await api.approvePending(id)
             console.log('Approved:', result)
-            
+
             // Check if should stream (voice channel returns should_stream: true)
             if ((result as { should_stream?: boolean }).should_stream) {
                 navigate(`/voice-call/${id}`)
@@ -87,8 +87,8 @@ export default function ApprovalQueue() {
         }
     }
 
-    const filtered = filter === 'all' 
-        ? pending 
+    const filtered = filter === 'all'
+        ? pending
         : pending.filter(p => p.status === filter || p.risk_level.toLowerCase() === filter.toLowerCase())
 
     const getRiskColor = (level: string) => {
@@ -100,12 +100,27 @@ export default function ApprovalQueue() {
         }
     }
 
+    const getChannelBadge = (channel: string) => {
+        let styles = 'bg-zinc-100 text-zinc-600 border-zinc-200 shadow-sm'
+        switch (channel) {
+            case 'voice': styles = 'bg-purple-100 text-purple-700 border-purple-200 shadow-purple-500/5'; break;
+            case 'email': styles = 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-indigo-500/5'; break;
+            case 'whatsapp': styles = 'bg-emerald-100 text-emerald-700 border-emerald-200 shadow-emerald-500/5'; break;
+        }
+        return (
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-[0.15em] ${styles} transition-all hover:brightness-95`}>
+                {getChannelIcon(channel)}
+                <span>{channel}</span>
+            </div>
+        )
+    }
+
     const getChannelIcon = (channel: string) => {
         switch (channel) {
-            case 'voice': return <Phone size={16} />
-            case 'email': return <Mail size={16} />
-            case 'whatsapp': return <MessageSquare size={16} />
-            default: return <Clock size={16} />
+            case 'voice': return <Phone size={14} />
+            case 'email': return <Mail size={14} />
+            case 'whatsapp': return <MessageSquare size={14} />
+            default: return <Clock size={14} />
         }
     }
 
@@ -149,7 +164,7 @@ export default function ApprovalQueue() {
                     <h1 className="text-5xl font-black tracking-tighter text-zinc-950 leading-none">Approval Queue</h1>
                 </div>
 
-                <button 
+                <button
                     onClick={fetchPending}
                     className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold text-zinc-600 transition-all"
                 >
@@ -194,8 +209,8 @@ export default function ApprovalQueue() {
                     <button
                         key={f}
                         onClick={() => setFilter(f)}
-                        className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === f 
-                            ? 'bg-zinc-950 text-white shadow-xl' 
+                        className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === f
+                            ? 'bg-zinc-950 text-white shadow-xl'
                             : 'bg-zinc-50 text-zinc-400 hover:bg-zinc-100'}`}
                     >
                         {f}
@@ -224,13 +239,10 @@ export default function ApprovalQueue() {
                                             {item.risk_level} ({item.risk_score.toFixed(2)})
                                         </span>
                                         {getInterventionBadge(item.intervention_method)}
-                                        <div className="flex items-center gap-1.5 text-zinc-400">
-                                            {getChannelIcon(item.channel)}
-                                            <span className="text-xs font-bold">{item.channel.toUpperCase()}</span>
-                                        </div>
+                                        {getChannelBadge(item.channel)}
                                         {getStatusBadge(item.status)}
                                     </div>
-                                    
+
                                     <p className="text-sm text-zinc-600 italic line-clamp-2 mb-4">
                                         "{item.message_preview}"
                                     </p>
@@ -307,10 +319,7 @@ export default function ApprovalQueue() {
 
                             {/* Channel & Status */}
                             <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-2 text-zinc-600">
-                                    {getChannelIcon(selectedItem.channel)}
-                                    <span className="font-bold">{selectedItem.channel.toUpperCase()}</span>
-                                </div>
+                                {getChannelBadge(selectedItem.channel)}
                                 {getStatusBadge(selectedItem.status)}
                             </div>
 
