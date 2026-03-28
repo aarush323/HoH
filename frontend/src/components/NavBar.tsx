@@ -8,6 +8,7 @@ const links = [
     { to: '/portfolio', label: 'Customer Dashboard' },
     { to: '/outreach', label: 'Outreach Dashboard' },
     { to: '/shocks', label: 'Shock Events' },
+    { to: '/behaviour', label: 'Behavioural' },
 ]
 
 export default function NavBar() {

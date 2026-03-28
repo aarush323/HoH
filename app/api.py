@@ -634,3 +634,149 @@ async def reject_intervention(pending_id: int, request: Request):
         "rejected_by": rejected_by,
         "reason": rejection_reason,
     }
+
+
+# ===== BEHAVIOURAL FEATURE INFERENCE ENDPOINTS =====
+
+
+@app.post("/behaviour/classify")
+async def classify_single_transaction(request: Request):
+    """Classify a single transaction"""
+    from txn_intelligence.engine import classify_transaction
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    merchant = body.get("merchant", "")
+    amount = body.get("amount")
+    mcc = body.get("mcc")
+
+    result = classify_transaction(merchant, amount, mcc)
+    return result
+
+
+@app.post("/behaviour/batch")
+async def classify_batch_transactions(request: Request):
+    """Classify multiple transactions and aggregate features"""
+    from txn_intelligence.engine import process_customer_transactions
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    customer_id = body.get("customer_id", "unknown")
+    transactions = body.get("transactions", [])
+
+    result = process_customer_transactions(customer_id, transactions)
+    return result
+
+
+@app.get("/behaviour/sample")
+async def get_sample_transactions():
+    """Get sample transactions for demo"""
+    from txn_intelligence.engine import SAMPLE_TRANSACTIONS
+
+    return {"transactions": SAMPLE_TRANSACTIONS}
+
+
+@app.get("/behaviour/sample-12weeks")
+async def get_sample_12_weeks():
+    """Get sample transactions for demo (backward compatibility)"""
+    from txn_intelligence.engine import SAMPLE_12_WEEKS
+
+    return {"transactions_by_week": SAMPLE_12_WEEKS}
+
+
+@app.get("/behaviour/profiles")
+async def get_sample_profiles():
+    """Get available sample customer profiles"""
+    from txn_intelligence.engine import get_sample_profiles
+
+    return {"profiles": get_sample_profiles()}
+
+
+@app.post("/behaviour/analyze-profile")
+async def analyze_profile(request: Request):
+    """Analyze a specific profile by key"""
+    from txn_intelligence.engine import (
+        get_profile_transactions,
+        classify_transaction,
+        aggregate_12_weeks,
+    )
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    profile_key = body.get("profile_key", "")
+
+    transactions_by_week = get_profile_transactions(profile_key)
+
+    if not transactions_by_week:
+        return {"error": "Profile not found"}
+
+    # Classify all transactions first
+    classified_by_week = {}
+    for week, txns in transactions_by_week.items():
+        classified_txns = []
+        for txn in txns:
+            result = classify_transaction(
+                merchant=txn.get("merchant", ""),
+                amount=txn.get("amount", 0) or 0,
+                mcc=txn.get("mcc"),
+            )
+            classified_txns.append(
+                {
+                    "merchant": txn.get("merchant", ""),
+                    "amount": txn.get("amount", 0) or 0,
+                    **result,
+                }
+            )
+        classified_by_week[week] = classified_txns
+
+    # Aggregate and get trends
+    result = aggregate_12_weeks(classified_by_week)
+
+    return {"profile_key": profile_key, **result}
+
+
+@app.post("/behaviour/analyze-12weeks")
+async def analyze_12_weeks(request: Request):
+    """Analyze 12 weeks of transactions with trends and insights"""
+    from txn_intelligence.engine import aggregate_12_weeks, classify_transaction
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    transactions_by_week = body.get("transactions_by_week", {})
+    customer_id = body.get("customer_id", "unknown")
+
+    # Classify all transactions first
+    classified_by_week = {}
+    for week, txns in transactions_by_week.items():
+        classified_txns = []
+        for txn in txns:
+            result = classify_transaction(
+                merchant=txn.get("merchant", ""),
+                amount=txn.get("amount", 0) or 0,
+                mcc=txn.get("mcc"),
+            )
+            classified_txns.append(
+                {
+                    "merchant": txn.get("merchant", ""),
+                    "amount": txn.get("amount", 0) or 0,
+                    **result,
+                }
+            )
+        classified_by_week[week] = classified_txns
+
+    # Aggregate and get trends
+    result = aggregate_12_weeks(classified_by_week)
+
+    return {"customer_id": customer_id, **result}

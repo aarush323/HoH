@@ -9,6 +9,7 @@ import Landing from './pages/Landing'
 import Journey from './pages/Journey'
 import CustomerDetailDashboard from './pages/CustomerDetailDashboard'
 import ApprovalQueue from './pages/ApprovalQueue'
+import BehaviouralFeatures from './pages/BehaviouralFeatures'
 import { LiveFeedProvider } from './context/LiveFeedContext'
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="/outreach" element={<Outreach />} />
             <Route path="/approvals" element={<ApprovalQueue />} />
             <Route path="/journey/:id" element={<Journey />} />
+            <Route path="/behaviour" element={<BehaviouralFeatures />} />
           </Routes>
         </LiveFeedProvider>
       </main>

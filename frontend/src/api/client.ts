@@ -9,7 +9,6 @@ import type {
     Rules,
     DashboardStats,
     PendingIntervention,
-    PendingSummary,
     PendingApprovalsResponse,
     ApproveResponse,
     RejectResponse,
@@ -70,6 +69,91 @@ export const api = {
             rejection_reason: reason,
             rejected_by: rejectedBy || 'manager'
         }),
+
+    // Behavioural Feature Inference
+    classifyTransaction: (merchant: string, amount: number, mcc?: string) =>
+        post<{ category: string; source: string; confidence: number; reason: string }>(
+            '/behaviour/classify', { merchant, amount, mcc }
+        ),
+    classifyBatch: (customerId: string, transactions: Array<{ merchant: string; amount: number; mcc?: string }>) =>
+        post<{
+            customer_id: string;
+            transaction_count: number;
+            classified_transactions: Array<{
+                merchant: string;
+                amount: number;
+                category: string;
+                source: string;
+                confidence: number;
+                reason: string;
+            }>;
+            derived_features: {
+                gambling_lottery_spend_inr: number;
+                discretionary_spend_inr: number;
+                essential_spend_inr: number;
+                lending_app_count: number;
+                lending_app_amount_inr: number;
+                atm_withdrawals: number;
+                total_transactions: number;
+            };
+        }>('/behaviour/batch', { customer_id: customerId, transactions }),
+    getSampleTransactions: () =>
+        get<{ transactions: Array<{ merchant: string; amount: number }> }>('/behaviour/sample'),
+    getSample12Weeks: () =>
+        get<{ transactions_by_week: Record<string, Array<{ merchant: string; amount: number }>> }>('/behaviour/sample-12weeks'),
+    getProfiles: () =>
+        get<{ profiles: Array<{ key: string; name: string; profile: string; description: string }> }>('/behaviour/profiles'),
+    analyzeProfile: (profileKey: string) =>
+        post<{
+            profile_key: string;
+            weekly: Record<string, {
+                gambling_lottery_spend_inr: number;
+                discretionary_spend_inr: number;
+                luxury_spend_inr: number;
+                gig_income_inr: number;
+                recreation_spend_inr: number;
+                lending_app_amount_inr: number;
+                essential_spend_inr: number;
+                salary_income_inr: number;
+                total_transactions: number;
+            }>;
+            totals: {
+                gambling_lottery_spend_inr: number;
+                discretionary_spend_inr: number;
+                luxury_spend_inr: number;
+                gig_income_inr: number;
+                recreation_spend_inr: number;
+                lending_app_amount_inr: number;
+                essential_spend_inr: number;
+                salary_income_inr: number;
+                total_transactions: number;
+            };
+            trends: Record<string, number>;
+            gig_worker_score: number;
+            week_count: number;
+            classification_breakdown: Array<{
+                merchant: string;
+                amount: number;
+                week: string;
+                category: string;
+                layer: string;
+                confidence: number;
+                reason: string;
+            }>;
+            score_factors: {
+                gig_transaction_count: number;
+                total_transactions: number;
+                gig_ratio: number;
+                calculation: string;
+                has_gig_income: boolean;
+                formula: string;
+            };
+            category_distribution: Array<{
+                category: string;
+                count: number;
+                percentage: number;
+            }>;
+        }>('/behaviour/analyze-profile', { profile_key: profileKey }),
 };
 
 // SSE stream hook helper
