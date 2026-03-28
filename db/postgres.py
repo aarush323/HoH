@@ -283,6 +283,55 @@ def create_tables_if_not_exist():
         """)
         )
 
+        # 5. Pending Approvals (Approval Queue)
+        conn.execute(
+            text("""
+            CREATE TABLE IF NOT EXISTS pending_interventions (
+                id                      BIGSERIAL PRIMARY KEY,
+                customer_id             VARCHAR(20) REFERENCES customers(customer_id),
+                observation_week        DATE,
+                risk_score              NUMERIC(6,4),
+                risk_level              VARCHAR(20),
+                intervention_method     VARCHAR(50),
+                intervention_justification TEXT,
+                channel                 VARCHAR(20),
+                message_preview         TEXT,
+                voice_script_preview    TEXT,
+                compliance_status       VARCHAR(20),
+                hard_stop_reason        TEXT,
+                status                  VARCHAR(20) DEFAULT 'PENDING',
+                approved_by             VARCHAR(100),
+                approved_at             TIMESTAMPTZ,
+                rejected_by             VARCHAR(100),
+                rejection_reason        TEXT,
+                rejected_at             TIMESTAMPTZ,
+                executed_at             TIMESTAMPTZ,
+                execution_result        JSONB,
+                created_at              TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE (customer_id, observation_week)
+            )
+        """)
+        )
+
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_pending_status ON pending_interventions (status)"
+            )
+        )
+
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_pending_risk_level ON pending_interventions (risk_level)"
+            )
+        )
+
+        # Add pending_id reference to interventions table
+        conn.execute(
+            text(
+                "ALTER TABLE interventions ADD COLUMN IF NOT EXISTS pending_id BIGINT;"
+            )
+        )
+
         alter_statements = [
             "ALTER TABLE raw_observations_staging ADD COLUMN IF NOT EXISTS monthly_income_inr NUMERIC(14,2);",
             "ALTER TABLE raw_observations_staging ADD COLUMN IF NOT EXISTS emi_amount_inr NUMERIC(12,2);",

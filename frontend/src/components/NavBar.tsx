@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { api } from '../api/client'
 
 const links = [
     { to: '/dashboard', label: 'Dashboard' },
@@ -11,6 +13,22 @@ const links = [
 export default function NavBar() {
     const location = useLocation()
     const isLanding = location.pathname === '/'
+    const [pendingCount, setPendingCount] = useState(0)
+
+    useEffect(() => {
+        const fetchPendingCount = async () => {
+            try {
+                const response = await api.getPendingApprovals()
+                setPendingCount(response.summary.pending)
+            } catch (err) {
+                console.error('Failed to fetch pending count:', err)
+            }
+        }
+
+        fetchPendingCount()
+        const interval = setInterval(fetchPendingCount, 30000)
+        return () => clearInterval(interval)
+    }, [])
 
     return (
         <header className="fixed top-0 w-full z-50 border-b border-zinc-200/50 bg-white/80 backdrop-blur-xl shadow-sm h-16">
@@ -35,10 +53,40 @@ export default function NavBar() {
                                     {l.label}
                                 </NavLink>
                             ))}
+                            
+                            {/* Approval Queue with Badge */}
+                            <NavLink
+                                to="/approvals"
+                                className={({ isActive }) =>
+                                    `pb-4 -mb-[17px] transition-colors flex items-center gap-2 ${isActive
+                                        ? 'text-zinc-900 border-b-2 border-emerald-500'
+                                        : 'text-zinc-500 hover:text-zinc-900'
+                                    }`
+                                }
+                            >
+                                Approval Queue
+                                {pendingCount > 0 && (
+                                    <span className="px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-bold rounded-full min-w-[20px] text-center">
+                                        {pendingCount > 99 ? '99+' : pendingCount}
+                                    </span>
+                                )}
+                            </NavLink>
                         </nav>
                     )}
                 </div>
                 <div className="flex items-center gap-4">
+                    {/* Mobile Approval Queue Badge */}
+                    {!isLanding && pendingCount > 0 && (
+                        <NavLink
+                            to="/approvals"
+                            className="md:hidden flex items-center gap-2 px-3 py-1.5 bg-emerald-500 text-white rounded-full text-xs font-bold"
+                        >
+                            <span>Approvals</span>
+                            <span className="px-1.5 py-0.5 bg-white/20 rounded-full">
+                                {pendingCount}
+                            </span>
+                        </NavLink>
+                    )}
                     <NavLink
                         to="/live"
                         className="bg-[#004ac6] text-white px-4 py-1.5 rounded-full text-sm font-medium hover:shadow-md transition-all active:scale-95 flex items-center gap-2"

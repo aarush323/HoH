@@ -600,3 +600,127 @@ def persist_to_db_node(state: Main_context) -> dict:
         raise
 
     return state
+
+
+# ===== QUEUE FOR APPROVAL NODE (NEW) =====
+
+
+def queue_for_approval(state: Main_context) -> dict:
+    """
+    Queue intervention for human approval instead of auto-execution.
+    This replaces the voice_prep -> channel_dispatch -> voice_agent flow.
+    """
+    from db.queries import create_pending_intervention
+
+    intervention = state.get("Intervention_method", "monitor_only")
+    risk_level = state.get("risk_level", "LOW")
+    risk_score = state.get("total_risk_score", 0.0)
+    customer_id = state.get("Customer_profile", {}).get("customer_id", "unknown")
+    observation_week = state.get("observation_week")
+    message = state.get("Message_content", "")
+    justification = state.get("Intervention_justification", "")
+    hard_stop = state.get("hard_stop", False)
+    hard_stop_reason = state.get("hard_stop_reason")
+    eligible_interventions = state.get("eligible_interventions", [])
+
+    # Determine channel based on risk level and intervention
+    if intervention == "monitor_only":
+        channel = "none"
+        compliance_status = "CLEAR"
+    elif hard_stop:
+        channel = "none"
+        compliance_status = "HARDSTOP"
+    elif risk_level in ["HIGH", "VERY_HIGH", "very high"]:
+        channel = "voice"
+        compliance_status = "CLEAR"
+    elif risk_level == "MED":
+        channel = "whatsapp"
+        compliance_status = "CLEAR"
+    else:
+        channel = "email"
+        compliance_status = "CLEAR"
+
+    # Generate voice script preview if voice channel
+    voice_script = None
+    if channel == "voice":
+        voice_script = _generate_voice_script_preview(state)
+
+    # Save to pending_interventions table
+    try:
+        pending_id = create_pending_intervention(
+            {
+                "customer_id": customer_id,
+                "observation_week": observation_week,
+                "risk_score": risk_score,
+                "risk_level": risk_level,
+                "intervention_method": intervention,
+                "intervention_justification": justification,
+                "channel": channel,
+                "message_preview": message,
+                "voice_script_preview": voice_script,
+                "compliance_status": compliance_status,
+                "hard_stop_reason": hard_stop_reason,
+                "status": "PENDING",
+            }
+        )
+        print(f"\n[QUEUE] Created pending intervention: {pending_id} for {customer_id}")
+        print(
+            f"[QUEUE] Channel: {channel}, Risk Level: {risk_level}, Intervention: {intervention}"
+        )
+
+        if channel == "voice":
+            print(f"[QUEUE] Voice call queued - awaiting manager approval")
+        elif channel == "whatsapp":
+            print(f"[QUEUE] WhatsApp message queued - awaiting manager approval")
+        elif channel == "email":
+            print(f"[QUEUE] Email queued - awaiting manager approval")
+        else:
+            print(f"[QUEUE] Monitor only - no outreach needed")
+
+    except Exception as e:
+        print(f"[QUEUE] Error creating pending intervention: {e}")
+        pending_id = None
+
+    return {
+        "pending_id": pending_id,
+        "channel": channel,
+        "compliance_status": compliance_status,
+        "needs_approval": channel != "none" and not hard_stop,
+        "voice_script_preview": voice_script,
+    }
+
+
+def _generate_voice_script_preview(state: Main_context) -> str:
+    """Generate a preview of what the voice call will say."""
+    profile = state.get("Customer_profile", {})
+    stress = state.get("Stress_context", {})
+    intervention = state.get("Intervention_method", "monitor_only")
+    message = state.get("Message_content", "")
+    name = (
+        profile.get("name", "Customer").split()[0]
+        if profile.get("name")
+        else "Customer"
+    )
+
+    offer_map = {
+        "payment_holiday": "a payment holiday - we can pause your next payment",
+        "restructuring": "a loan restructuring option - we can reduce your monthly payment",
+        "rm_call": "a direct call with your relationship manager",
+        "financial_counseling": "a free 20-minute session with our financial advisor",
+        "monitor_only": "monitoring your account",
+    }
+
+    offer = offer_map.get(intervention, "support with your account")
+
+    script = f"""
+Hello {name}, this is a courtesy call from the Customer Support team.
+
+We're reaching out because we've noticed some changes in your account and wanted to check in with you.
+
+Based on our review, we'd like to offer you {offer}. 
+
+{message}
+
+Would you like to speak with someone about this option?
+"""
+    return script.strip()

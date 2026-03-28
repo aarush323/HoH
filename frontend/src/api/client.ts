@@ -8,6 +8,11 @@ import type {
     InterveneResponse,
     Rules,
     DashboardStats,
+    PendingIntervention,
+    PendingSummary,
+    PendingApprovalsResponse,
+    ApproveResponse,
+    RejectResponse,
 } from '../types';
 
 const BASE = '/api';
@@ -47,6 +52,24 @@ export const api = {
     getRules: () => get<Rules>('/rules'),
     getHealth: () => get<{ status: string; model: string }>('/health'),
     triggerProducer: () => post<{ status: string; messages_sent: number }>('/trigger-producer'),
+    
+    // Pending Approvals API
+    getPendingApprovals: (riskLevel?: string, status?: string) => {
+        let url = '/pending-approvals';
+        const params = new URLSearchParams();
+        if (riskLevel) params.append('risk_level', riskLevel);
+        if (status) params.append('status', status);
+        if (params.toString()) url += `?${params.toString()}`;
+        return get<PendingApprovalsResponse>(url);
+    },
+    getPendingDetail: (id: number) => get<PendingIntervention>(`/pending-approvals/${id}`),
+    approvePending: (id: number, approvedBy?: string) => 
+        post<ApproveResponse>(`/pending-approvals/${id}/approve`, { approved_by: approvedBy || 'manager' }),
+    rejectPending: (id: number, reason: string, rejectedBy?: string) =>
+        post<RejectResponse>(`/pending-approvals/${id}/reject`, { 
+            rejection_reason: reason,
+            rejected_by: rejectedBy || 'manager'
+        }),
 };
 
 // SSE stream hook helper

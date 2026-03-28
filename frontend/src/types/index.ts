@@ -263,3 +263,66 @@ export type JourneyEvent =
     | JourneyCompleteEvent
     | { type: 'ping' }
     | { type: 'error'; message: string };
+
+// === Pending Approvals Types ===
+
+export interface PendingIntervention {
+    id: number;
+    customer_id: string;
+    name: string;
+    observation_week: string;
+    risk_score: number;
+    risk_level: string;
+    intervention_method: string;
+    intervention_justification: string;
+    channel: 'voice' | 'whatsapp' | 'email' | 'none';
+    message_preview: string;
+    voice_script_preview: string | null;
+    compliance_status: string;
+    hard_stop_reason: string | null;
+    status: 'PENDING' | 'APPROVED' | 'EXECUTED' | 'REJECTED';
+    approved_by?: string;
+    approved_at?: string;
+    rejected_by?: string;
+    rejection_reason?: string;
+    rejected_at?: string;
+    executed_at?: string;
+    created_at: string;
+    customer_segment?: string;
+    product_type?: string;
+    loan_amount?: number;
+}
+
+export interface PendingSummary {
+    total: number;
+    pending: number;
+    approved: number;
+    executed: number;
+    rejected: number;
+    by_risk_level: { high: number; medium: number; low: number };
+    by_channel: { voice: number; whatsapp: number; email: number };
+}
+
+export interface PendingApprovalsResponse {
+    pending: PendingIntervention[];
+    summary: PendingSummary;
+}
+
+export interface ApproveResponse {
+    status: string;
+    pending_id: number;
+    customer_id: string;
+    channel: string;
+    intervention_method: string;
+    execution_result?: unknown;
+    approved_by: string;
+    error?: string;
+}
+
+export interface RejectResponse {
+    status: string;
+    pending_id: number;
+    rejected_by: string;
+    reason: string;
+    error?: string;
+}

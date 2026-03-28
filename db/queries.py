@@ -739,3 +739,325 @@ def get_dashboard_stats() -> dict:
                 for r in top_factors
             ],
         }
+
+
+# ===== PENDING INTERVENTIONS QUERIES =====
+
+
+def get_pending_interventions(
+    risk_level: str = None, status: str = "PENDING"
+) -> list[dict]:
+    """
+    Get all pending interventions for approval queue.
+    """
+    with get_connection() as conn:
+        query = """
+            SELECT pi.*, c.name, c.customer_segment, c.product_type, c.loan_amount
+            FROM pending_interventions pi
+            JOIN customers c ON pi.customer_id = c.customer_id
+            WHERE pi.status = :status
+        """
+        params = {"status": status}
+
+        if risk_level:
+            query += " AND pi.risk_level = :risk_level"
+            params["risk_level"] = risk_level
+
+        query += " ORDER BY pi.risk_score DESC, pi.created_at ASC"
+
+        rows = conn.execute(text(query), params).fetchall()
+
+    result = []
+    for row in rows:
+        r = row._mapping
+        result.append(
+            {
+                "id": r["id"],
+                "customer_id": r["customer_id"],
+                "name": r["name"] or f"Customer {r['customer_id']}",
+                "observation_week": str(r["observation_week"])
+                if r["observation_week"]
+                else None,
+                "risk_score": float(r["risk_score"]) if r["risk_score"] else 0.0,
+                "risk_level": r["risk_level"],
+                "intervention_method": r["intervention_method"],
+                "intervention_justification": r["intervention_justification"],
+                "channel": r["channel"],
+                "message_preview": r["message_preview"],
+                "voice_script_preview": r["voice_script_preview"],
+                "compliance_status": r["compliance_status"],
+                "hard_stop_reason": r["hard_stop_reason"],
+                "status": r["status"],
+                "created_at": str(r["created_at"]) if r["created_at"] else None,
+                "customer_segment": r["customer_segment"],
+                "product_type": r["product_type"],
+                "loan_amount": float(r["loan_amount"]) if r["loan_amount"] else 0.0,
+            }
+        )
+
+    return result
+
+
+def get_pending_intervention_by_id(pending_id: int) -> dict | None:
+    """
+    Get a single pending intervention by ID.
+    """
+    with get_connection() as conn:
+        row = conn.execute(
+            text("""
+                SELECT pi.*, c.name, c.customer_segment, c.product_type, 
+                       c.loan_amount, c.relationship_value
+                FROM pending_interventions pi
+                JOIN customers c ON pi.customer_id = c.customer_id
+                WHERE pi.id = :id
+            """),
+            {"id": pending_id},
+        ).fetchone()
+
+    if not row:
+        return None
+
+    r = row._mapping
+    return {
+        "id": r["id"],
+        "customer_id": r["customer_id"],
+        "name": r["name"] or f"Customer {r['customer_id']}",
+        "observation_week": str(r["observation_week"])
+        if r["observation_week"]
+        else None,
+        "risk_score": float(r["risk_score"]) if r["risk_score"] else 0.0,
+        "risk_level": r["risk_level"],
+        "intervention_method": r["intervention_method"],
+        "intervention_justification": r["intervention_justification"],
+        "channel": r["channel"],
+        "message_preview": r["message_preview"],
+        "voice_script_preview": r["voice_script_preview"],
+        "compliance_status": r["compliance_status"],
+        "hard_stop_reason": r["hard_stop_reason"],
+        "status": r["status"],
+        "approved_by": r["approved_by"],
+        "approved_at": str(r["approved_at"]) if r["approved_at"] else None,
+        "rejected_by": r["rejected_by"],
+        "rejection_reason": r["rejection_reason"],
+        "rejected_at": str(r["rejected_at"]) if r["rejected_at"] else None,
+        "executed_at": str(r["executed_at"]) if r["executed_at"] else None,
+        "execution_result": r["execution_result"],
+        "created_at": str(r["created_at"]) if r["created_at"] else None,
+        "customer_segment": r["customer_segment"],
+        "product_type": r["product_type"],
+        "loan_amount": float(r["loan_amount"]) if r["loan_amount"] else 0.0,
+        "relationship_value": r["relationship_value"],
+    }
+
+
+def create_pending_intervention(data: dict) -> int:
+    """
+    Create a new pending intervention entry.
+    Returns the pending_id.
+    """
+    with get_connection() as conn:
+        result = conn.execute(
+            text("""
+                INSERT INTO pending_interventions (
+                    customer_id, observation_week, risk_score, risk_level,
+                    intervention_method, intervention_justification, channel,
+                    message_preview, voice_script_preview, compliance_status,
+                    hard_stop_reason, status
+                ) VALUES (
+                    :customer_id, :observation_week, :risk_score, :risk_level,
+                    :intervention_method, :intervention_justification, :channel,
+                    :message_preview, :voice_script_preview, :compliance_status,
+                    :hard_stop_reason, :status
+                )
+                ON CONFLICT (customer_id, observation_week) DO UPDATE SET
+                    risk_score = EXCLUDED.risk_score,
+                    risk_level = EXCLUDED.risk_level,
+                    intervention_method = EXCLUDED.intervention_method,
+                    intervention_justification = EXCLUDED.intervention_justification,
+                    channel = EXCLUDED.channel,
+                    message_preview = EXCLUDED.message_preview,
+                    voice_script_preview = EXCLUDED.voice_script_preview,
+                    status = EXCLUDED.status,
+                    created_at = NOW()
+                RETURNING id
+            """),
+            {
+                "customer_id": data["customer_id"],
+                "observation_week": data.get("observation_week"),
+                "risk_score": data.get("risk_score"),
+                "risk_level": data.get("risk_level"),
+                "intervention_method": data.get("intervention_method"),
+                "intervention_justification": data.get("intervention_justification"),
+                "channel": data.get("channel"),
+                "message_preview": data.get("message_preview"),
+                "voice_script_preview": data.get("voice_script_preview"),
+                "compliance_status": data.get("compliance_status", "CLEAR"),
+                "hard_stop_reason": data.get("hard_stop_reason"),
+                "status": data.get("status", "PENDING"),
+            },
+        )
+        conn.commit()
+        return result.scalar()
+
+
+def approve_pending_intervention(pending_id: int, approved_by: str = "system") -> dict:
+    """
+    Approve a pending intervention and mark for execution.
+    Returns the updated pending record.
+    """
+    with get_connection() as conn:
+        # First get current status
+        current = conn.execute(
+            text("SELECT status FROM pending_interventions WHERE id = :id"),
+            {"id": pending_id},
+        ).fetchone()
+
+        if not current:
+            return {"error": "Pending intervention not found"}
+
+        if current.status == "EXECUTED":
+            return {"error": "Already executed", "status": "EXECUTED"}
+
+        if current.status == "REJECTED":
+            return {"error": "Already rejected", "status": "REJECTED"}
+
+        if current.status == "APPROVED":
+            return {"error": "Already approved", "status": "APPROVED"}
+
+        # Update to APPROVED
+        conn.execute(
+            text("""
+                UPDATE pending_interventions
+                SET status = 'APPROVED',
+                    approved_by = :approved_by,
+                    approved_at = NOW()
+                WHERE id = :id
+            """),
+            {"id": pending_id, "approved_by": approved_by},
+        )
+        conn.commit()
+
+        return {"status": "APPROVED", "approved_by": approved_by}
+
+
+def mark_intervention_executed(pending_id: int, execution_result: dict = None) -> dict:
+    """
+    Mark a pending intervention as executed after voice/email/whatsapp.
+    """
+    import json
+
+    with get_connection() as conn:
+        result = conn.execute(
+            text("""
+                UPDATE pending_interventions
+                SET status = 'EXECUTED',
+                    executed_at = NOW(),
+                    execution_result = :execution_result
+                WHERE id = :id
+                RETURNING id, customer_id, channel, intervention_method
+            """),
+            {
+                "id": pending_id,
+                "execution_result": json.dumps(execution_result)
+                if execution_result
+                else None,
+            },
+        )
+        conn.commit()
+        row = result.fetchone()
+
+        if row:
+            return {
+                "status": "EXECUTED",
+                "pending_id": row.id,
+                "customer_id": row.customer_id,
+                "channel": row.channel,
+                "intervention_method": row.intervention_method,
+                "execution_result": execution_result,
+            }
+        return {"error": "Not found"}
+
+
+def reject_pending_intervention(
+    pending_id: int, rejected_by: str = "system", rejection_reason: str = None
+) -> dict:
+    """
+    Reject a pending intervention.
+    """
+    with get_connection() as conn:
+        # First get current status
+        current = conn.execute(
+            text("SELECT status FROM pending_interventions WHERE id = :id"),
+            {"id": pending_id},
+        ).fetchone()
+
+        if not current:
+            return {"error": "Pending intervention not found"}
+
+        if current.status != "PENDING":
+            return {
+                "error": f"Cannot reject: status is {current.status}",
+                "status": current.status,
+            }
+
+        conn.execute(
+            text("""
+                UPDATE pending_interventions
+                SET status = 'REJECTED',
+                    rejected_by = :rejected_by,
+                    rejection_reason = :reason,
+                    rejected_at = NOW()
+                WHERE id = :id
+            """),
+            {"id": pending_id, "rejected_by": rejected_by, "reason": rejection_reason},
+        )
+        conn.commit()
+
+        return {
+            "status": "REJECTED",
+            "rejected_by": rejected_by,
+            "reason": rejection_reason,
+        }
+
+
+def get_pending_summary() -> dict:
+    """
+    Get summary of pending interventions for dashboard.
+    """
+    with get_connection() as conn:
+        stats = conn.execute(
+            text("""
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN status = 'PENDING' THEN 1 END) as pending_count,
+                    COUNT(CASE WHEN status = 'APPROVED' THEN 1 END) as approved_count,
+                    COUNT(CASE WHEN status = 'EXECUTED' THEN 1 END) as executed_count,
+                    COUNT(CASE WHEN status = 'REJECTED' THEN 1 END) as rejected_count,
+                    COUNT(CASE WHEN risk_level = 'HIGH' AND status = 'PENDING' THEN 1 END) as high_risk_pending,
+                    COUNT(CASE WHEN risk_level = 'MED' AND status = 'PENDING' THEN 1 END) as medium_risk_pending,
+                    COUNT(CASE WHEN risk_level = 'LOW' AND status = 'PENDING' THEN 1 END) as low_risk_pending,
+                    COUNT(CASE WHEN channel = 'voice' AND status = 'PENDING' THEN 1 END) as voice_pending,
+                    COUNT(CASE WHEN channel = 'whatsapp' AND status = 'PENDING' THEN 1 END) as whatsapp_pending,
+                    COUNT(CASE WHEN channel = 'email' AND status = 'PENDING' THEN 1 END) as email_pending
+                FROM pending_interventions
+            """)
+        ).fetchone()
+
+    s = stats._mapping
+    return {
+        "total": s["total"] or 0,
+        "pending": s["pending_count"] or 0,
+        "approved": s["approved_count"] or 0,
+        "executed": s["executed_count"] or 0,
+        "rejected": s["rejected_count"] or 0,
+        "by_risk_level": {
+            "high": s["high_risk_pending"] or 0,
+            "medium": s["medium_risk_pending"] or 0,
+            "low": s["low_risk_pending"] or 0,
+        },
+        "by_channel": {
+            "voice": s["voice_pending"] or 0,
+            "whatsapp": s["whatsapp_pending"] or 0,
+            "email": s["email_pending"] or 0,
+        },
+    }

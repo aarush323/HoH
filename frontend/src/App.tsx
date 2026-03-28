@@ -8,6 +8,7 @@ import Outreach from './pages/Outreach'
 import Landing from './pages/Landing'
 import Journey from './pages/Journey'
 import CustomerDetailDashboard from './pages/CustomerDetailDashboard'
+import ApprovalQueue from './pages/ApprovalQueue'
 import { LiveFeedProvider } from './context/LiveFeedContext'
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/portfolio" element={<PortfolioInsights />} />
             <Route path="/shocks" element={<ShockEvents />} />
             <Route path="/outreach" element={<Outreach />} />
+            <Route path="/approvals" element={<ApprovalQueue />} />
             <Route path="/journey/:id" element={<Journey />} />
           </Routes>
         </LiveFeedProvider>

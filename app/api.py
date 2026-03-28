@@ -22,6 +22,12 @@ from db.queries import (
     get_weekly_observations_live,
     get_total_events,
     get_customer_detail_overview,
+    get_pending_interventions,
+    get_pending_intervention_by_id,
+    get_pending_summary,
+    approve_pending_intervention,
+    mark_intervention_executed,
+    reject_pending_intervention,
 )
 from db.postgres import create_tables_if_not_exist, get_connection
 from sqlalchemy import text
@@ -170,12 +176,18 @@ async def intervene(customer_id: str, request: Request):
         result = graph.invoke(initial_state)
         print("[Intervene] Agents completed successfully")
         return {
-            "status": "success",
+            "status": "pending_approval",
             "customer_id": customer_id,
+            "pending_id": result.get("pending_id"),
+            "needs_approval": result.get("needs_approval", False),
+            "channel": result.get("channel"),
+            "compliance_status": result.get("compliance_status"),
             "intervention_method": result.get("Intervention_method"),
+            "intervention_justification": result.get("Intervention_justification"),
             "message_content": result.get("Message_content"),
-            "selected_channel": result.get("selected_channel"),
-            "total_risk_score": result.get("total_risk_score")
+            "voice_script_preview": result.get("voice_script_preview"),
+            "total_risk_score": result.get("total_risk_score"),
+            "risk_level": result.get("risk_level"),
         }
     except Exception as e:
         import traceback
@@ -327,8 +339,13 @@ async def stream_risk():
 
                         if not is_granular:
                             total_events = await run_in_threadpool(get_total_events)
-                            customers = await run_in_threadpool(get_all_customers_with_risk)
-                            payload = {"customers": customers, "total_events": total_events}
+                            customers = await run_in_threadpool(
+                                get_all_customers_with_risk
+                            )
+                            payload = {
+                                "customers": customers,
+                                "total_events": total_events,
+                            }
 
                             if payload != last_data:
                                 yield f"data: {json.dumps(payload, default=str)}\n\n"
@@ -461,8 +478,6 @@ async def journey_stream(customer_id: str):
 
                 try:
                     result = await run_in_threadpool(graph.invoke, initial_state)
-                    voice_result = result.get("voice_result") or {}
-                    call_memory = voice_result.get("call_memory") or {}
                     intervention_method = result.get("Intervention_method")
                     message_content = result.get("Message_content")
                     if intervention_method == "monitor_only" and not message_content:
@@ -475,10 +490,11 @@ async def journey_stream(customer_id: str):
                         "score": round(result.get("total_risk_score", 0), 4),
                         "risk_level": result.get("risk_level"),
                         "method": intervention_method,
-                        "channel": result.get("selected_channel"),
+                        "channel": result.get("channel"),
                         "message": message_content,
-                        "voice_outcome": voice_result.get("outcome"),
-                        "offer_accepted": call_memory.get("offer_accepted"),
+                        "pending_id": result.get("pending_id"),
+                        "needs_approval": result.get("needs_approval", False),
+                        "status": "pending_approval",
                         "hard_stop": result.get("hard_stop"),
                         "hard_stop_reason": result.get("hard_stop_reason"),
                     }
@@ -497,3 +513,124 @@ async def journey_stream(customer_id: str):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ===== PENDING APPROVALS ENDPOINTS =====
+
+
+@app.get("/pending-approvals")
+def list_pending_approvals(risk_level: str = None, status: str = "PENDING"):
+    """
+    Get all pending interventions for approval queue.
+    Used by frontend to show pending items.
+    """
+    pending = get_pending_interventions(risk_level=risk_level, status=status)
+    summary = get_pending_summary()
+    return {"pending": pending, "summary": summary}
+
+
+@app.get("/pending-approvals/summary")
+def get_approval_summary():
+    """
+    Get summary of pending interventions for dashboard.
+    """
+    return get_pending_summary()
+
+
+@app.get("/pending-approvals/{pending_id}")
+def get_pending_detail(pending_id: int):
+    """
+    Get full details of a single pending intervention.
+    Used by frontend to show preview before approval.
+    """
+    pending = get_pending_intervention_by_id(pending_id)
+    if not pending:
+        raise HTTPException(status_code=404, detail="Pending intervention not found")
+    return pending
+
+
+@app.post("/pending-approvals/{pending_id}/approve")
+async def approve_intervention(pending_id: int, request: Request):
+    """
+    Approve a pending intervention.
+    This will execute the intervention (voice call / whatsapp / email).
+
+    SAFETY: Double execution prevention built into the query.
+    """
+    try:
+        body = await request.json() if request.method == "POST" else {}
+    except Exception:
+        body = {}
+
+    approved_by = body.get("approved_by", "manager")
+
+    # First approve (mark as approved, ready for execution)
+    approve_result = approve_pending_intervention(pending_id, approved_by)
+
+    if "error" in approve_result:
+        return approve_result
+
+    # Get pending details for execution
+    pending = get_pending_intervention_by_id(pending_id)
+    if not pending:
+        return {"error": "Pending intervention not found"}
+
+    # Execute based on channel
+    from app.executor import execute_intervention
+
+    try:
+        execution_result = execute_intervention(pending)
+
+        # Mark as executed
+        mark_intervention_executed(pending_id, execution_result)
+
+        print(f"[APPROVE] Executed {pending['channel']} for {pending['customer_id']}")
+
+        return {
+            "status": "EXECUTED",
+            "pending_id": pending_id,
+            "customer_id": pending["customer_id"],
+            "channel": pending["channel"],
+            "intervention_method": pending["intervention_method"],
+            "execution_result": execution_result,
+            "approved_by": approved_by,
+        }
+    except Exception as e:
+        print(f"[APPROVE] Execution failed: {e}")
+        return {
+            "status": "APPROVED_BUT_EXECUTION_FAILED",
+            "pending_id": pending_id,
+            "error": str(e),
+            "approved_by": approved_by,
+        }
+
+
+@app.post("/pending-approvals/{pending_id}/reject")
+async def reject_intervention(pending_id: int, request: Request):
+    """
+    Reject a pending intervention.
+    Logs the rejection reason.
+    """
+    try:
+        body = await request.json() if request.method == "POST" else {}
+    except Exception:
+        body = {}
+
+    rejected_by = body.get("rejected_by", "manager")
+    rejection_reason = body.get("rejection_reason", "Rejected by manager")
+
+    result = reject_pending_intervention(pending_id, rejected_by, rejection_reason)
+
+    if "error" in result:
+        return result
+
+    print(
+        f"[REJECT] Rejected pending_id={pending_id} by {rejected_by}: {rejection_reason}"
+    )
+
+    return {
+        "status": "REJECTED",
+        "pending_id": pending_id,
+        "rejected_by": rejected_by,
+        "reason": rejection_reason,
+    }
