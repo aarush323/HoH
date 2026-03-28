@@ -342,7 +342,6 @@ export default function IngestionStream() {
                                 const stepIdx = si + 1
                                 const isDone = stepIdx < progress
                                 const isCurrent = stepIdx === progress
-                                const isPending = stepIdx > progress
                                 const isFailed = S.name === 'OUTREACH' && hasHardStop && (isDone || isCurrent)
 
                                 let status: 'done' | 'active' | 'pending' | 'failed' = 'pending'

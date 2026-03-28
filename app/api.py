@@ -69,6 +69,90 @@ def list_voice_customers():
     return get_voice_customers()
 
 
+@app.get("/voice/execute/{pending_id}")
+async def execute_voice_stream(pending_id: int):
+    """
+    Start a voice call and stream events to the client via SSE.
+    Clients can listen to events: call_start, agent_speaking, listening,
+    transcript, intent_detected, stage_change, escalation, call_end.
+
+    After call completes, marks the intervention as executed in the database.
+    """
+    import json
+    import asyncio
+    from queue import Queue
+    from threading import Thread
+
+    pending = get_pending_intervention_by_id(pending_id)
+    if not pending:
+        raise HTTPException(status_code=404, detail="Pending intervention not found")
+
+    if pending.get("channel") != "voice":
+        raise HTTPException(status_code=400, detail="Not a voice intervention")
+
+    event_queue = Queue()
+    # Use a mutable container to track result
+    call_result = [{"executed": False, "error": None}]
+
+    def run_voice_call():
+        """Run voice call in background thread, emit events to queue."""
+        try:
+            from app.executor import build_voice_payload
+            from voice_agent.agent import run_call
+
+            voice_payload = build_voice_payload(pending)
+
+            def emit_fn(event: str, data: dict):
+                event_queue.put((event, data))
+
+            result = run_call(voice_payload, emit_fn)
+            event_queue.put(("call_complete", result))
+        except Exception as e:
+            event_queue.put(("error", {"message": str(e)}))
+
+    def event_generator():
+        """Async generator that yields events from the queue."""
+        # Start voice call in background thread
+        call_thread = Thread(target=run_voice_call, daemon=True)
+        call_thread.start()
+
+        try:
+            while True:
+                # Check for events in queue
+                try:
+                    event_data = event_queue.get(timeout=0.5)
+                    event_type, data = event_data
+
+                    # Yield SSE formatted message
+                    yield f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+                    if event_type == "call_complete":
+                        call_result[0] = {"executed": True, "voice_result": data}
+                        break
+                    elif event_type == "error":
+                        call_result[0] = {
+                            "executed": False,
+                            "error": data.get("message"),
+                        }
+                        break
+
+                except Exception:
+                    # Queue timeout, continue waiting
+                    if not call_thread.is_alive():
+                        break
+                    continue
+
+        finally:
+            # Mark intervention as executed in database
+            try:
+                mark_intervention_executed(pending_id, call_result[0])
+                print(f"[VOICE-STREAM] Marked pending_id={pending_id} as executed")
+            except Exception as db_err:
+                print(f"[VOICE-STREAM] Failed to mark executed: {db_err}")
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @app.get("/dashboard/stats")
 def get_stats():
     """Returns aggregated statistics for Dashboard KPIs."""
@@ -560,7 +644,8 @@ def get_pending_detail(pending_id: int):
 async def approve_intervention(pending_id: int, request: Request):
     """
     Approve a pending intervention.
-    This will execute the intervention (voice call / whatsapp / email).
+    For voice: marks as APPROVED and returns should_stream=true for frontend to start live call.
+    For other channels: executes immediately and returns result.
 
     SAFETY: Double execution prevention built into the query.
     """
@@ -582,7 +667,19 @@ async def approve_intervention(pending_id: int, request: Request):
     if not pending:
         return {"error": "Pending intervention not found"}
 
-    # Execute based on channel
+    # For voice channel: don't execute here, let frontend redirect to live call page
+    if pending.get("channel") == "voice":
+        return {
+            "status": "APPROVED",
+            "pending_id": pending_id,
+            "customer_id": pending["customer_id"],
+            "channel": pending["channel"],
+            "intervention_method": pending["intervention_method"],
+            "should_stream": True,
+            "approved_by": approved_by,
+        }
+
+    # Execute based on channel (email, whatsapp, etc.)
     from app.executor import execute_intervention
 
     try:

@@ -265,3 +265,31 @@ def _get_offer_detail(intervention_method: str) -> str:
         "monitor_only": "support with your account",
     }
     return offer_map.get(intervention_method, "support with your account")
+
+
+def build_voice_payload(pending_record: dict) -> dict:
+    """
+    Build voice payload from pending intervention record.
+    Used by both _execute_voice and the SSE streaming endpoint.
+    """
+    customer_id = pending_record.get("customer_id", "unknown")
+    name = pending_record.get("name", "Customer")
+    voice_script = pending_record.get("voice_script_preview", "")
+    intervention_method = pending_record.get("intervention_method", "monitor_only")
+
+    return {
+        "customer_name": name.split()[0] if name else "Customer",
+        "offer_type": intervention_method,
+        "offer_detail": _get_offer_detail(intervention_method),
+        "message": voice_script,
+        "tone": pending_record.get("message_tone", "Empathetic"),
+        "tone_hints": ["warm and gentle"],
+        "avoid_topics": ["collections", "legal action"],
+        "stress": {
+            "narrative": pending_record.get("stress_narrative", ""),
+            "severity": "Medium",
+        },
+        "max_turns": 5,
+        "language_hint": "english",
+        "fallback_message": "Let me connect you with someone from our team who can help.",
+    }

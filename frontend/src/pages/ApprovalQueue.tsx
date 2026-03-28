@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { PendingIntervention, PendingSummary } from '../types'
 import {
@@ -18,6 +19,7 @@ import {
 export default function ApprovalQueue() {
     const [pending, setPending] = useState<PendingIntervention[]>([])
     const [summary, setSummary] = useState<PendingSummary | null>(null)
+    const navigate = useNavigate()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [filter, setFilter] = useState<string>('PENDING')
@@ -50,7 +52,13 @@ export default function ApprovalQueue() {
             setActionLoading(id)
             const result = await api.approvePending(id)
             console.log('Approved:', result)
-            await fetchPending()
+            
+            // Check if should stream (voice channel returns should_stream: true)
+            if ((result as { should_stream?: boolean }).should_stream) {
+                navigate(`/voice-call/${id}`)
+            } else {
+                await fetchPending()
+            }
         } catch (err) {
             console.error('Failed to approve:', err)
             alert('Failed to approve intervention')

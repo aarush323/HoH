@@ -10,6 +10,7 @@ import Journey from './pages/Journey'
 import CustomerDetailDashboard from './pages/CustomerDetailDashboard'
 import ApprovalQueue from './pages/ApprovalQueue'
 import BehaviouralFeatures from './pages/BehaviouralFeatures'
+import VoiceCall from './pages/VoiceCall'
 import { LiveFeedProvider } from './context/LiveFeedContext'
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="/shocks" element={<ShockEvents />} />
             <Route path="/outreach" element={<Outreach />} />
             <Route path="/approvals" element={<ApprovalQueue />} />
+            <Route path="/voice-call/:pendingId" element={<VoiceCall />} />
             <Route path="/journey/:id" element={<Journey />} />
             <Route path="/behaviour" element={<BehaviouralFeatures />} />
           </Routes>
