@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hoh-consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hoh-consumer
+  template:
+    metadata:
+      labels:
+        app: hoh-consumer
+    spec:
+      containers:
+        - name: hoh-consumer
+          image: hoh-consumer
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef:
+                name: hoh-config
+            - secretRef:
+                name: hoh-secrets

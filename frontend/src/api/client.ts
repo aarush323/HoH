@@ -14,7 +14,7 @@ import type {
     RejectResponse,
 } from '../types';
 
-const BASE = '/api';
+const BASE = 'http://localhost:8000';
 
 async function get<T>(path: string): Promise<T> {
     const res = await fetch(`${BASE}${path}`);
@@ -84,7 +84,7 @@ export const api = {
     getRules: () => get<Rules>('/rules'),
     getHealth: () => get<{ status: string; model: string }>('/health'),
     triggerProducer: () => post<{ status: string; messages_sent: number }>('/trigger-producer'),
-    
+
     // Pending Approvals API
     getPendingApprovals: (riskLevel?: string, status?: string) => {
         let url = '/pending-approvals';
@@ -95,10 +95,10 @@ export const api = {
         return get<PendingApprovalsResponse>(url);
     },
     getPendingDetail: (id: number) => get<PendingIntervention>(`/pending-approvals/${id}`),
-    approvePending: (id: number, approvedBy?: string) => 
+    approvePending: (id: number, approvedBy?: string) =>
         post<ApproveResponse>(`/pending-approvals/${id}/approve`, { approved_by: approvedBy || 'manager' }),
     rejectPending: (id: number, reason: string, rejectedBy?: string) =>
-        post<RejectResponse>(`/pending-approvals/${id}/reject`, { 
+        post<RejectResponse>(`/pending-approvals/${id}/reject`, {
             rejection_reason: reason,
             rejected_by: rejectedBy || 'manager'
         }),

@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hoh-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hoh-api
+  template:
+    metadata:
+      labels:
+        app: hoh-api
+    spec:
+      containers:
+        - name: hoh-api
+          image: hoh-api
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef:
+                name: hoh-config
+            - secretRef:
+                name: hoh-secrets
+          ports:
+            - containerPort: 8000

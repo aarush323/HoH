@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hoh-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hoh-frontend
+  template:
+    metadata:
+      labels:
+        app: hoh-frontend
+    spec:
+      containers:
+        - name: hoh-frontend
+          image: hoh-frontend
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80

@@ -15,7 +15,6 @@ import {
     AlertCircle,
     Gamepad2,
     User,
-    Calculator,
     Sparkles,
     Info,
 } from 'lucide-react'
