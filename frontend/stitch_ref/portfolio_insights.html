@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Portfolio Insights | HoH</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-error-container": "#93000a",
+              "background": "#f9f9f9",
+              "on-surface-variant": "#434655",
+              "on-surface": "#1a1c1c",
+              "surface-bright": "#f9f9f9",
+              "primary-container": "#2563eb",
+              "surface-container-low": "#f3f3f3",
+              "primary": "#004ac6",
+              "tertiary": "#943700",
+              "surface-container-lowest": "#ffffff",
+              "surface": "#f9f9f9",
+              "on-primary": "#ffffff",
+              "error": "#ba1a1a",
+              "outline-variant": "#c3c6d7",
+            },
+            fontFamily: {
+              "headline": ["Inter"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .glass-header { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="bg-background text-on-surface">
+<!-- TopAppBar from JSON -->
+<header class="fixed top-0 w-full z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl shadow-sm dark:shadow-none font-['Inter'] antialiased tracking-tight">
+<nav class="flex items-center justify-between px-8 h-16 w-full max-w-[1440px] mx-auto">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold tracking-tighter text-slate-900 dark:text-white">HoH</span>
+<div class="hidden md:flex items-center gap-6">
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" href="#">Dashboard</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" href="#">Live Feed</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" href="#">Customer Journey</a>
+<a class="text-blue-600 dark:text-blue-400 font-semibold border-b-2 border-blue-600 dark:border-blue-400 pb-1" href="#">Portfolio</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" href="#">Shock Events</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" href="#">Outreach</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-full">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+</span>
+<span class="text-[10px] font-bold tracking-widest uppercase text-slate-500">Live</span>
+</div>
+<div class="flex items-center gap-1">
+<div class="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Kafka Connected"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-blue-500" title="Postgres Active"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-red-500" title="Redis Sync"></div>
+</div>
+<div class="flex items-center gap-3 ml-2 border-l border-slate-200 pl-4">
+<span class="material-symbols-outlined text-slate-500 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-all active:scale-95">sensors</span>
+<span class="material-symbols-outlined text-slate-500 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-all active:scale-95">notifications</span>
+<span class="material-symbols-outlined text-slate-900 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-all active:scale-95">account_circle</span>
+</div>
+</div>
+</nav>
+</header>
+<main class="pt-16 min-h-screen">
+<!-- Sticky Filter Bar -->
+<div class="sticky top-16 z-40 bg-white border-b border-slate-100 px-8 py-4 shadow-sm">
+<div class="max-w-[1440px] mx-auto flex flex-wrap items-end gap-6">
+<!-- Age Range -->
+<div class="flex flex-col gap-2 min-w-[160px]">
+<label class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Age Range (18-65)</label>
+<div class="relative h-6 flex items-center">
+<div class="w-full h-1 bg-slate-100 rounded-full relative">
+<div class="absolute left-[10%] right-[30%] h-full bg-primary rounded-full"></div>
+<div class="absolute left-[10%] -top-1.5 w-4 h-4 bg-white border-2 border-primary rounded-full shadow-sm cursor-pointer"></div>
+<div class="absolute right-[30%] -top-1.5 w-4 h-4 bg-white border-2 border-primary rounded-full shadow-sm cursor-pointer"></div>
+</div>
+</div>
+</div>
+<!-- Geography -->
+<div class="flex flex-col gap-2 min-w-[140px]">
+<label class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Geography</label>
+<select class="text-sm font-medium border-none bg-slate-50 rounded-lg focus:ring-2 focus:ring-primary/20 py-2 pl-3 pr-8">
+<option>All Regions</option>
+<option>North</option>
+<option>South</option>
+<option>East</option>
+<option>West</option>
+<option>Central</option>
+</select>
+</div>
+<!-- Product Type -->
+<div class="flex flex-col gap-2">
+<label class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Products</label>
+<div class="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-lg">
+<label class="flex items-center gap-2 cursor-pointer">
+<input checked="" class="rounded border-slate-300 text-primary focus:ring-primary" type="checkbox"/>
+<span class="text-xs font-medium">Home</span>
+</label>
+<label class="flex items-center gap-2 cursor-pointer">
+<input checked="" class="rounded border-slate-300 text-primary focus:ring-primary" type="checkbox"/>
+<span class="text-xs font-medium">Auto</span>
+</label>
+<label class="flex items-center gap-2 cursor-pointer">
+<input class="rounded border-slate-300 text-primary focus:ring-primary" type="checkbox"/>
+<span class="text-xs font-medium">CC</span>
+</label>
+</div>
+</div>
+<!-- Segment Toggle -->
+<div class="flex flex-col gap-2">
+<label class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Segment</label>
+<div class="flex bg-slate-100 p-1 rounded-lg">
+<button class="px-4 py-1.5 text-xs font-semibold rounded-md bg-white shadow-sm">All</button>
+<button class="px-4 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors">Premium</button>
+<button class="px-4 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors">Regular</button>
+</div>
+</div>
+<div class="flex items-center gap-4 ml-auto">
+<button class="text-xs font-semibold text-slate-400 hover:text-slate-600 underline underline-offset-4">Reset</button>
+<button class="px-6 py-2.5 bg-gradient-to-br from-primary to-primary-container text-white rounded-full text-sm font-semibold shadow-md active:scale-95 transition-all">Apply Filters</button>
+</div>
+</div>
+</div>
+<!-- Content Grid -->
+<section class="p-8 max-w-[1440px] mx-auto grid grid-cols-12 gap-8">
+<!-- 1. Risk Score Histogram -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-lowest rounded-2xl p-6 shadow-sm">
+<div class="flex justify-between items-center mb-8">
+<div>
+<h3 class="text-lg font-bold tracking-tight">Risk Score Distribution</h3>
+<p class="text-xs text-slate-500">Portfolio-wide default probability density</p>
+</div>
+<div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-tighter">
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>Low</span>
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span>Mid</span>
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span>High</span>
+</div>
+</div>
+<div class="h-64 flex items-end justify-between gap-2 px-2">
+<!-- Bars -->
+<div class="w-full bg-emerald-500/20 rounded-t-sm h-[15%] transition-all hover:bg-emerald-500/40 relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">12.4k</div>
+</div>
+<div class="w-full bg-emerald-500/30 rounded-t-sm h-[45%] transition-all hover:bg-emerald-500/50"></div>
+<div class="w-full bg-emerald-500/40 rounded-t-sm h-[85%] transition-all hover:bg-emerald-500/60"></div>
+<div class="w-full bg-emerald-500/50 rounded-t-sm h-[95%] transition-all hover:bg-emerald-500/70"></div>
+<div class="w-full bg-amber-500/50 rounded-t-sm h-[60%] transition-all hover:bg-amber-500/70"></div>
+<div class="w-full bg-amber-500/60 rounded-t-sm h-[40%] transition-all hover:bg-amber-500/80"></div>
+<div class="w-full bg-red-500/40 rounded-t-sm h-[25%] transition-all hover:bg-red-500/60"></div>
+<div class="w-full bg-red-500/60 rounded-t-sm h-[15%] transition-all hover:bg-red-500/80"></div>
+<div class="w-full bg-red-500/80 rounded-t-sm h-[8%] transition-all hover:bg-red-500/95"></div>
+<div class="w-full bg-red-600 rounded-t-sm h-[4%] transition-all hover:bg-red-700"></div>
+</div>
+<div class="flex justify-between mt-4 px-2 text-[10px] font-medium text-slate-400">
+<span>0.0</span><span>0.2</span><span>0.4</span><span>0.6</span><span>0.8</span><span>1.0</span>
+</div>
+</div>
+<!-- 5. Intervention Method Distribution (Donut) -->
+<div class="col-span-12 lg:col-span-4 bg-surface-container-lowest rounded-2xl p-6 shadow-sm flex flex-col">
+<h3 class="text-lg font-bold tracking-tight mb-1">Intervention Strategy</h3>
+<p class="text-xs text-slate-500 mb-8">Active mitigation protocols</p>
+<div class="flex-grow flex items-center justify-center relative py-4">
+<!-- Simple SVG Donut -->
+<svg class="w-48 h-48 transform -rotate-90" viewbox="0 0 100 100">
+<circle cx="50" cy="50" fill="transparent" r="40" stroke="#f3f3f3" stroke-width="12"></circle>
+<circle cx="50" cy="50" fill="transparent" r="40" stroke="#004ac6" stroke-dasharray="251.2" stroke-dashoffset="165.8" stroke-width="12"></circle> <!-- 34% -->
+<circle cx="50" cy="50" fill="transparent" r="40" stroke="#2563eb" stroke-dasharray="251.2" stroke-dashoffset="221" stroke-width="12" transform="rotate(122 50 50)"></circle> <!-- 12% -->
+<circle cx="50" cy="50" fill="transparent" r="40" stroke="#943700" stroke-dasharray="251.2" stroke-dashoffset="206" stroke-width="12" transform="rotate(165 50 50)"></circle> <!-- 18% -->
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-3xl font-extrabold tracking-tighter tabular-nums">8,421</span>
+<span class="text-[10px] font-bold uppercase text-slate-400">Total Actions</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4 mt-6">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="text-xs font-medium">Payment Holiday (34%)</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-blue-500"></div>
+<span class="text-xs font-medium">Restructure (12%)</span>
+</div>
+</div>
+</div>
+<!-- 2. Risk by Geography & 3. Risk by Product -->
+<div class="col-span-12 lg:col-span-6 bg-surface-container-lowest rounded-2xl p-6 shadow-sm">
+<h3 class="text-lg font-bold tracking-tight mb-6">Geographic Risk Density</h3>
+<div class="space-y-6">
+<!-- North -->
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-bold uppercase tracking-wider">
+<span>North</span>
+<span class="text-slate-400 tabular-nums">Avg Risk: 0.22</span>
+</div>
+<div class="flex h-3 w-full rounded-full overflow-hidden bg-slate-100">
+<div class="h-full bg-emerald-500 w-[70%]"></div>
+<div class="h-full bg-amber-500 w-[20%]"></div>
+<div class="h-full bg-red-500 w-[10%]"></div>
+</div>
+</div>
+<!-- South -->
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-bold uppercase tracking-wider">
+<span>South</span>
+<span class="text-slate-400 tabular-nums">Avg Risk: 0.48</span>
+</div>
+<div class="flex h-3 w-full rounded-full overflow-hidden bg-slate-100">
+<div class="h-full bg-emerald-500 w-[45%]"></div>
+<div class="h-full bg-amber-500 w-[35%]"></div>
+<div class="h-full bg-red-500 w-[20%]"></div>
+</div>
+</div>
+<!-- East -->
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-bold uppercase tracking-wider">
+<span>East</span>
+<span class="text-slate-400 tabular-nums">Avg Risk: 0.15</span>
+</div>
+<div class="flex h-3 w-full rounded-full overflow-hidden bg-slate-100">
+<div class="h-full bg-emerald-500 w-[85%]"></div>
+<div class="h-full bg-amber-500 w-[10%]"></div>
+<div class="h-full bg-red-500 w-[5%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- 4. Risk by Segment -->
+<div class="col-span-12 lg:col-span-6 bg-surface-container-lowest rounded-2xl p-6 shadow-sm">
+<h3 class="text-lg font-bold tracking-tight mb-8">Segment Comparison</h3>
+<div class="flex items-end justify-around h-48 gap-8 px-8">
+<div class="flex flex-col items-center gap-4 w-full">
+<div class="w-24 bg-primary/10 rounded-xl flex flex-col justify-end h-full overflow-hidden group hover:bg-primary/20 transition-colors">
+<div class="h-[32%] bg-primary w-full group-hover:h-[35%] transition-all"></div>
+</div>
+<div class="text-center">
+<p class="text-xs font-bold uppercase tracking-widest text-slate-400">Premium</p>
+<p class="text-xl font-extrabold tabular-nums">0.32</p>
+</div>
+</div>
+<div class="flex flex-col items-center gap-4 w-full">
+<div class="w-24 bg-slate-100 rounded-xl flex flex-col justify-end h-full overflow-hidden group hover:bg-slate-200 transition-colors">
+<div class="h-[58%] bg-slate-400 w-full group-hover:h-[60%] transition-all"></div>
+</div>
+<div class="text-center">
+<p class="text-xs font-bold uppercase tracking-widest text-slate-400">Regular</p>
+<p class="text-xl font-extrabold tabular-nums">0.58</p>
+</div>
+</div>
+</div>
+</div>
+<!-- 6. Age vs Risk Scatter -->
+<div class="col-span-12 bg-surface-container-lowest rounded-2xl p-8 shadow-sm">
+<div class="flex justify-between items-start mb-12">
+<div>
+<h3 class="text-xl font-bold tracking-tight">Age vs Risk Concentration</h3>
+<p class="text-sm text-slate-500 mt-1">Bubble size relative to outstanding loan amount ($10k - $500k)</p>
+</div>
+<button class="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg text-xs font-semibold hover:bg-slate-100 transition-colors">
+<span class="material-symbols-outlined text-sm">filter_list</span>
+                        Granularity: High
+                    </button>
+</div>
+<div class="h-[400px] w-full relative border-l border-b border-slate-100">
+<!-- Y-Axis Labels -->
+<div class="absolute -left-10 top-0 h-full flex flex-col justify-between text-[10px] font-bold text-slate-400 pb-2">
+<span>1.0</span><span>0.8</span><span>0.6</span><span>0.4</span><span>0.2</span><span>0.0</span>
+</div>
+<!-- X-Axis Labels -->
+<div class="absolute -bottom-8 left-0 w-full flex justify-between text-[10px] font-bold text-slate-400">
+<span>18 Years</span><span>30</span><span>45</span><span>60</span><span>65 Years</span>
+</div>
+<!-- Grid Lines -->
+<div class="absolute inset-0 grid grid-rows-5 pointer-events-none">
+<div class="border-t border-slate-50"></div>
+<div class="border-t border-slate-50"></div>
+<div class="border-t border-slate-50"></div>
+<div class="border-t border-slate-50"></div>
+<div class="border-t border-slate-50"></div>
+</div>
+<!-- Scatter Dots -->
+<a class="absolute bottom-[20%] left-[15%] w-4 h-4 rounded-full bg-emerald-500/60 ring-4 ring-emerald-500/10 cursor-pointer hover:scale-125 hover:ring-8 transition-all" href="/journey" title="User ID: 8219 | Risk: 0.2 | Loan: $45k"></a>
+<a class="absolute bottom-[75%] left-[28%] w-8 h-8 rounded-full bg-red-500/60 ring-4 ring-red-500/10 cursor-pointer hover:scale-125 hover:ring-8 transition-all" href="/journey" title="User ID: 1042 | Risk: 0.75 | Loan: $280k"></a>
+<a class="absolute bottom-[40%] left-[45%] w-12 h-12 rounded-full bg-amber-500/60 ring-4 ring-amber-500/10 cursor-pointer hover:scale-125 hover:ring-8 transition-all" href="/journey" title="User ID: 9920 | Risk: 0.4 | Loan: $420k"></a>
+<a class="absolute bottom-[15%] left-[60%] w-6 h-6 rounded-full bg-emerald-500/60 ring-4 ring-emerald-500/10 cursor-pointer hover:scale-125 hover:ring-8 transition-all" href="/journey" title="User ID: 3312 | Risk: 0.15 | Loan: $110k"></a>
+<a class="absolute bottom-[55%] left-[75%] w-10 h-10 rounded-full bg-amber-600/60 ring-4 ring-amber-600/10 cursor-pointer hover:scale-125 hover:ring-8 transition-all" href="/journey" title="User ID: 4451 | Risk: 0.55 | Loan: $310k"></a>
+<a class="absolute bottom-[90%] left-[85%] w-5 h-5 rounded-full bg-red-600/60 ring-4 ring-red-600/10 cursor-pointer hover:scale-125 hover:ring-8 transition-all" href="/journey" title="User ID: 0192 | Risk: 0.9 | Loan: $65k"></a>
+<a class="absolute bottom-[30%] left-[40%] w-7 h-7 rounded-full bg-emerald-500/60 ring-4 ring-emerald-500/10 cursor-pointer hover:scale-125 hover:ring-8 transition-all" href="/journey"></a>
+<a class="absolute bottom-[65%] left-[55%] w-9 h-9 rounded-full bg-red-500/60 ring-4 ring-red-500/10 cursor-pointer hover:scale-125 hover:ring-8 transition-all" href="/journey"></a>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer Status (Asymmetric Minimalist) -->
+<footer class="mt-12 mb-8 px-8 max-w-[1440px] mx-auto flex justify-between items-center opacity-50 text-[10px] font-bold uppercase tracking-[0.2em]">
+<div class="flex gap-8">
+<span>Query Time: 42ms</span>
+<span>Batch ID: HOH-PROD-2931</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>All Systems Nominal</span>
+<span>© 2024 HoH Architecture</span>
+</div>
+</footer>
+</body></html>

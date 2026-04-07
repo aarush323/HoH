@@ -36,12 +36,14 @@ def analyst_node(state: Main_context):
     Given data: risk_score: {risk_score}, risk_level: {risk_level}
     shap_details: {shap_text}
     from the above details , make a short concise narrative , identify the type of stress and the severity.
+    ALSO, suggest a single tactical 'recommended_action' for the RM/Collections team (max 15 words).
 
     Give Stress analysis. return JSON ONLY:
         {{
             "narrative" : "str",
             "stress_type": "income_shock | overspending | structural | debt | unknown",
-            "severity" : "very high | high | medium | low"
+            "severity" : "very high | high | medium | low",
+            "recommended_action": "str"
         }}
     """
 
@@ -54,17 +56,54 @@ def analyst_node(state: Main_context):
             "narrative": parse.get("narrative", ""),
             "stress_type": parse.get("stress_type", ""),
             "severity": parse.get("severity", ""),
+            "recommended_action": parse.get(
+                "recommended_action", "Monitor and review next week."
+            ),
         }
     }
 
 
 # ── Fuzzy stress type normalizer ─────────────────────────────────────────────
 _STRESS_KEYWORDS = {
-    "income_shock": ["income", "salary", "cash flow", "cashflow", "earning", "wage", "pay cut", "job loss"],
-    "overspending": ["spend", "discretionary", "lifestyle", "gambling", "lottery", "impulse"],
-    "structural":   ["structural", "auto debit", "auto-debit", "utility", "systemic", "recurring", "emi bounce"],
-    "debt":         ["debt", "credit", "lending app", "bnpl", "borrow", "loan stack", "over-leverag", "overleverag"],
+    "income_shock": [
+        "income",
+        "salary",
+        "cash flow",
+        "cashflow",
+        "earning",
+        "wage",
+        "pay cut",
+        "job loss",
+    ],
+    "overspending": [
+        "spend",
+        "discretionary",
+        "lifestyle",
+        "gambling",
+        "lottery",
+        "impulse",
+    ],
+    "structural": [
+        "structural",
+        "auto debit",
+        "auto-debit",
+        "utility",
+        "systemic",
+        "recurring",
+        "emi bounce",
+    ],
+    "debt": [
+        "debt",
+        "credit",
+        "lending app",
+        "bnpl",
+        "borrow",
+        "loan stack",
+        "over-leverag",
+        "overleverag",
+    ],
 }
+
 
 def _fuzzy_stress_type(raw: str) -> str:
     """Map free-text LLM stress type to canonical enum used by stress_ranking."""
@@ -77,6 +116,8 @@ def _fuzzy_stress_type(raw: str) -> str:
         if any(kw in low for kw in keywords):
             return canonical
     return "unknown"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -214,14 +255,13 @@ def agent2_compliance(state: Main_context) -> dict:
     }
 
 
-
 def intervention_agent(state: Main_context):
     risk_score = state["total_risk_score"]
     risk_level = state["risk_level"]
 
     eligible_interventions = state.get("eligible_interventions", [])
     eligible_text = "\\n".join(eligible_interventions)
-    
+
     # Prompt 1: Method selection from the filtered/ranked list
     prompt1 = f"""You are a Financial expert in Delinquency intervention. Select the best intervention approach for this customer from the EXACT list of eligible interventions below.
     
@@ -242,7 +282,7 @@ Strictly return JSON ONLY:
     "Intervention_justification": "brief reason for selection"
 }}"""
 
-    llm = get_llm(0) # or get_llm(1) depending on model availability
+    llm = get_llm(0)  # or get_llm(1) depending on model availability
     result1 = llm.invoke(prompt1)
     parse1 = clean_json(result1.content)
 
@@ -250,8 +290,10 @@ Strictly return JSON ONLY:
 
     # Safety constraint: enforce valid selection
     if selected_method not in eligible_interventions:
-        selected_method = eligible_interventions[0] if eligible_interventions else "monitor_only"
-        
+        selected_method = (
+            eligible_interventions[0] if eligible_interventions else "monitor_only"
+        )
+
     print(f"\\n[INTERVENTION AGENT] Final selected intervention: {selected_method}\\n")
 
     intervention_descriptions = {
@@ -330,11 +372,11 @@ def voice_prep_node(state: Main_context) -> dict:
     }
 
     specialist_map = {
-        "payment_holiday":      "our payments team who will activate that for you right away",
-        "restructuring":        "our restructuring specialist who will get that sorted for you",
+        "payment_holiday": "our payments team who will activate that for you right away",
+        "restructuring": "our restructuring specialist who will get that sorted for you",
         "financial_counseling": "one of our financial advisors for a free personalised session",
-        "rm_call":              "your relationship manager who can discuss personalised options with you directly",
-        "monitor_only":         "our support team",
+        "rm_call": "your relationship manager who can discuss personalised options with you directly",
+        "monitor_only": "our support team",
     }
 
     intervention = state.get("Intervention_method", "monitor_only")
@@ -409,14 +451,16 @@ from datetime import datetime
 from sqlalchemy import text
 from db.postgres import get_connection
 
+
 def log_fallback(state: dict, error_msg: str):
     log_file = "agent_output_fallback.log"
     import json
+
     try:
         dump = {
             "timestamp": datetime.now().isoformat(),
             "error": error_msg,
-            "state": state
+            "state": state,
         }
         with open(log_file, "a") as f:
             f.write(json.dumps(dump, default=str) + "\n")
@@ -442,17 +486,21 @@ def persist_to_db_node(state: Main_context) -> dict:
                 customer_id = state["Customer_profile"]["customer_id"]
 
                 # Step 2: Insert into stress_context
-                result = conn.execute(text("""
-                    INSERT INTO stress_context (customer_id, prediction_id, narrative, stress_type, severity)
-                    VALUES (:cid, :pid, :narrative, :type, :severity)
+                result = conn.execute(
+                    text("""
+                    INSERT INTO stress_context (customer_id, prediction_id, narrative, stress_type, severity, recommended_action)
+                    VALUES (:cid, :pid, :narrative, :type, :severity, :action)
                     RETURNING id
-                """), {
-                    "cid": customer_id,
-                    "pid": prediction_id,
-                    "narrative": stress.get("narrative"),
-                    "type": stress.get("stress_type"),
-                    "severity": stress.get("severity")
-                })
+                """),
+                    {
+                        "cid": customer_id,
+                        "pid": prediction_id,
+                        "narrative": stress.get("narrative"),
+                        "type": stress.get("stress_type"),
+                        "severity": stress.get("severity"),
+                        "action": stress.get("recommended_action"),
+                    },
+                )
                 stress_context_id = result.scalar()
 
                 # Step 3: Insert into interventions
@@ -463,7 +511,8 @@ def persist_to_db_node(state: Main_context) -> dict:
                 dispatch_res = state.get("channel_dispatch_result")
                 dispatch_json = json.dumps(dispatch_res) if dispatch_res else None
 
-                res3 = conn.execute(text("""
+                res3 = conn.execute(
+                    text("""
                     INSERT INTO interventions (
                         customer_id, observation_week, prediction_id, stress_context_id,
                         intervention_method, intervention_justification, eligible_interventions,
@@ -490,22 +539,24 @@ def persist_to_db_node(state: Main_context) -> dict:
                         outcome = EXCLUDED.outcome,
                         resolved_at = NULL
                     RETURNING id
-                """), {
-                    "cid": customer_id,
-                    "oweek": observation_week,
-                    "pid": prediction_id,
-                    "scid": stress_context_id,
-                    "imethod": state.get("Intervention_method"),
-                    "ijustify": state.get("Intervention_justification"),
-                    "eligible": eligible,
-                    "chan": state.get("selected_channel"),
-                    "tone": state.get("Message_Tone"),
-                    "content": state.get("Message_content"),
-                    "dispatch": dispatch_json,
-                    "hs": hard_stop_flag,
-                    "hsr": state.get("hard_stop_reason"),
-                    "status": initial_status
-                })
+                """),
+                    {
+                        "cid": customer_id,
+                        "oweek": observation_week,
+                        "pid": prediction_id,
+                        "scid": stress_context_id,
+                        "imethod": state.get("Intervention_method"),
+                        "ijustify": state.get("Intervention_justification"),
+                        "eligible": eligible,
+                        "chan": state.get("selected_channel"),
+                        "tone": state.get("Message_Tone"),
+                        "content": state.get("Message_content"),
+                        "dispatch": dispatch_json,
+                        "hs": hard_stop_flag,
+                        "hsr": state.get("hard_stop_reason"),
+                        "status": initial_status,
+                    },
+                )
                 intervention_id = res3.scalar()
 
                 # Step 4: Insert into voice_sessions (conditional)
@@ -514,35 +565,207 @@ def persist_to_db_node(state: Main_context) -> dict:
                     mem = vr.get("call_memory")
                     mem_json = json.dumps(mem) if mem else None
 
-                    conn.execute(text("""
+                    conn.execute(
+                        text("""
                         INSERT INTO voice_sessions (
                             intervention_id, customer_id, escalate, escalate_reason,
                             outcome, turns_taken, language_detected, call_memory, call_duration_seconds
                         ) VALUES (
                             :ivid, :cid, :esc, :escreason, :out, :turns, :lang, CAST(:mem AS JSONB), NULL
                         )
-                    """), {
-                        "ivid": intervention_id,
-                        "cid": customer_id,
-                        "esc": vr.get("escalate"),
-                        "escreason": vr.get("escalate_reason"),
-                        "out": vr.get("outcome"),
-                        "turns": vr.get("turns_taken"),
-                        "lang": vr.get("language_detected"),
-                        "mem": mem_json
-                    })
+                    """),
+                        {
+                            "ivid": intervention_id,
+                            "cid": customer_id,
+                            "esc": vr.get("escalate"),
+                            "escreason": vr.get("escalate_reason"),
+                            "out": vr.get("outcome"),
+                            "turns": vr.get("turns_taken"),
+                            "lang": vr.get("language_detected"),
+                            "mem": mem_json,
+                        },
+                    )
 
-                    conn.execute(text("""
+                    conn.execute(
+                        text("""
                         UPDATE interventions
                         SET outcome = :out, resolved_at = NOW()
                         WHERE id = :ivid
-                    """), {
-                        "out": vr.get("outcome"),
-                        "ivid": intervention_id
-                    })
+                    """),
+                        {"out": vr.get("outcome"), "ivid": intervention_id},
+                    )
 
     except Exception as e:
         log_fallback(state, str(e) + "\n" + traceback.format_exc())
         raise
 
-    return {}
+    return state
+
+
+# ===== SCORE-BASED CHANNEL SELECTION =====
+
+
+def select_channel(state: dict) -> str:
+    """Score-based, cost-optimised channel routing.
+
+    Routing matrix:
+      ≥0.85          → voice   (urgent, personal contact needed)
+      0.70-0.85 high → voice   (severity / structural-debt / counseling-restructure-rm)
+      0.70-0.85 else → whatsapp (e.g. payment_holiday docs)
+      0.55-0.70      → whatsapp (cost-effective moderate risk)
+      0.40-0.55      → email   (automated, low-touch)
+      <0.40          → none    (monitor only)
+    """
+    risk_score = state.get("total_risk_score", 0.0)
+    intervention = state.get("Intervention_method", "monitor_only")
+    severity = state.get("Stress_context", {}).get("severity", "low")
+    stress_type = state.get("Stress_context", {}).get("stress_type", "")
+
+    # 1. Monitor only = no outreach
+    if intervention == "monitor_only":
+        return "none"
+
+    # 2. ULTRA HIGH risk (≥0.85) = Voice mandatory
+    if risk_score >= 0.85:
+        return "voice"
+
+    # 3. HIGH risk (≥0.70) + High severity = Voice
+    if risk_score >= 0.70 and severity in ["high", "very high"]:
+        return "voice"
+
+    # 4. HIGH risk (≥0.70) + structural/debt stress = Voice
+    if risk_score >= 0.60:
+        if "structural" in stress_type or "debt" in stress_type:
+            return "voice"
+
+    # 5. HIGH risk (0.70-0.85) + specific interventions
+    if risk_score >= 0.60:
+        if intervention in ["financial_counseling", "restructuring", "rm_call"]:
+            return "voice"
+        return "whatsapp"  # e.g. payment_holiday at high risk
+
+    # 6. MEDIUM-HIGH (0.55-0.70) = WhatsApp (cost-effective)
+    if risk_score >= 0.45:
+        return "whatsapp"
+
+    # 7. MEDIUM (0.40-0.55) = Email (automated)
+    if risk_score >= 0.30:
+        return "email"
+
+    # 8. LOW (<0.40) = Monitor only
+    return "none"
+
+
+# ===== QUEUE FOR APPROVAL NODE =====
+
+
+def queue_for_approval(state: Main_context) -> dict:
+    """
+    Queue intervention for human approval instead of auto-execution.
+    This replaces the voice_prep -> channel_dispatch -> voice_agent flow.
+    """
+    from db.queries import create_pending_intervention
+
+    intervention = state.get("Intervention_method", "monitor_only")
+    risk_level = state.get("risk_level", "LOW")
+    risk_score = state.get("total_risk_score", 0.0)
+    customer_id = state.get("Customer_profile", {}).get("customer_id", "unknown")
+    observation_week = state.get("observation_week")
+    message = state.get("Message_content", "")
+    justification = state.get("Intervention_justification", "")
+    hard_stop = state.get("hard_stop", False)
+    hard_stop_reason = state.get("hard_stop_reason")
+    eligible_interventions = state.get("eligible_interventions", [])
+
+    # Determine channel via score-based, cost-optimised routing
+    if hard_stop:
+        channel = "none"
+        compliance_status = "HARDSTOP"
+    else:
+        channel = select_channel(state)
+        compliance_status = "CLEAR"
+
+    # Generate voice script preview if voice channel
+    voice_script = None
+    if channel == "voice":
+        voice_script = _generate_voice_script_preview(state)
+
+    # Save to pending_interventions table
+    try:
+        pending_id = create_pending_intervention(
+            {
+                "customer_id": customer_id,
+                "observation_week": observation_week,
+                "risk_score": risk_score,
+                "risk_level": risk_level,
+                "intervention_method": intervention,
+                "intervention_justification": justification,
+                "channel": channel,
+                "message_preview": message,
+                "voice_script_preview": voice_script,
+                "compliance_status": compliance_status,
+                "hard_stop_reason": hard_stop_reason,
+                "status": "PENDING",
+            }
+        )
+        print(f"\n[QUEUE] Created pending intervention: {pending_id} for {customer_id}")
+        print(
+            f"[QUEUE] Channel: {channel}, Risk Level: {risk_level}, Intervention: {intervention}"
+        )
+
+        if channel == "voice":
+            print(f"[QUEUE] Voice call queued - awaiting manager approval")
+        elif channel == "whatsapp":
+            print(f"[QUEUE] WhatsApp message queued - awaiting manager approval")
+        elif channel == "email":
+            print(f"[QUEUE] Email queued - awaiting manager approval")
+        else:
+            print(f"[QUEUE] Monitor only - no outreach needed")
+
+    except Exception as e:
+        print(f"[QUEUE] Error creating pending intervention: {e}")
+        pending_id = None
+
+    return {
+        "pending_id": pending_id,
+        "channel": channel,
+        "compliance_status": compliance_status,
+        "needs_approval": channel != "none" and not hard_stop,
+        "voice_script_preview": voice_script,
+    }
+
+
+def _generate_voice_script_preview(state: Main_context) -> str:
+    """Generate a preview of what the voice call will say."""
+    profile = state.get("Customer_profile", {})
+    stress = state.get("Stress_context", {})
+    intervention = state.get("Intervention_method", "monitor_only")
+    message = state.get("Message_content", "")
+    name = (
+        profile.get("name", "Customer").split()[0]
+        if profile.get("name")
+        else "Customer"
+    )
+
+    offer_map = {
+        "payment_holiday": "a payment holiday - we can pause your next payment",
+        "restructuring": "a loan restructuring option - we can reduce your monthly payment",
+        "rm_call": "a direct call with your relationship manager",
+        "financial_counseling": "a free 20-minute session with our financial advisor",
+        "monitor_only": "monitoring your account",
+    }
+
+    offer = offer_map.get(intervention, "support with your account")
+
+    script = f"""
+Hello {name}, this is a courtesy call from the Customer Support team.
+
+We're reaching out because we've noticed some changes in your account and wanted to check in with you.
+
+Based on our review, we'd like to offer you {offer}. 
+
+{message}
+
+Would you like to speak with someone about this option?
+"""
+    return script.strip()

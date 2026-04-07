@@ -1,5 +1,6 @@
 import sys
 import os
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import json
@@ -9,41 +10,77 @@ from db.postgres import get_connection
 from db.cassandra_component import get_session
 from sqlalchemy import text
 import httpx
+from db.redis_client import publish_event
 
 KAFKA_TOPIC = "customer-weekly-observations"
-KAFKA_BROKER = "localhost:9092"
+KAFKA_BROKER = "127.0.0.1:9093"
 
-consumer = KafkaConsumer(
-    KAFKA_TOPIC,
-    bootstrap_servers=KAFKA_BROKER,
-    auto_offset_reset="latest",
-    enable_auto_commit=True,
-    group_id="pre-delinquency-consumer",
-    value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-)
+_consumer = None
+_cassandra_session = None
 
-cassandra_session = get_session()
 
-print(f"[Consumer] Listening on topic '{KAFKA_TOPIC}'...\n")
+def get_consumer():
+    global _consumer
+    if _consumer is None:
+        try:
+            _consumer = KafkaConsumer(
+                KAFKA_TOPIC,
+                bootstrap_servers=KAFKA_BROKER,
+                auto_offset_reset="earliest",
+                enable_auto_commit=True,
+                group_id="pre-delinquency-consumer",
+                value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+                api_version=(2, 0, 2),
+            )
+            print(f"[Consumer] Connected to Kafka at {KAFKA_BROKER}")
+        except Exception as e:
+            print(f"[Consumer] Kafka connection failed: {e}")
+            raise
+    return _consumer
+
+
+def get_cassandra_session():
+    global _cassandra_session
+    if _cassandra_session is None:
+        _cassandra_session = get_session()
+    return _cassandra_session
 
 
 STRESS_THRESHOLDS = {
-    "salary_delay_days":          3,
-    "auto_debit_failures":        2,
-    "savings_drawdown_pct":       -20.0,
+    "salary_delay_days": 3,
+    "auto_debit_failures": 2,
+    "savings_drawdown_pct": -20.0,
     "utility_payment_delay_days": 3,
 }
 API_BASE = "http://localhost:8000"
 
+
 def should_trigger(record: dict) -> bool:
-    return (
-        record.get("salary_delay_days", 0)         >  STRESS_THRESHOLDS["salary_delay_days"] or
-        record.get("auto_debit_failures", 0)        >= STRESS_THRESHOLDS["auto_debit_failures"] or
-        record.get("savings_drawdown_pct", 0.0)     <  STRESS_THRESHOLDS["savings_drawdown_pct"] or
-        record.get("utility_payment_delay_days", 0) >  STRESS_THRESHOLDS["utility_payment_delay_days"] or
-        record.get("emi_bounced_flag", False)       == True or
-        record.get("missed_emi_count_rolling", 0)   >= 2
+    salary_delay = record.get("salary_delay_days", 0)
+    auto_debit = record.get("auto_debit_failures", 0)
+    savings_drawdown = record.get("savings_drawdown_pct", 0.0)
+    utility_delay = record.get("utility_payment_delay_days", 0)
+    emi_bounced = record.get("emi_bounced_flag", False)
+    missed_emi = record.get("missed_emi_count_rolling", 0)
+
+    triggered = (
+        salary_delay > STRESS_THRESHOLDS["salary_delay_days"]
+        or auto_debit >= STRESS_THRESHOLDS["auto_debit_failures"]
+        or savings_drawdown < STRESS_THRESHOLDS["savings_drawdown_pct"]
+        or utility_delay > STRESS_THRESHOLDS["utility_payment_delay_days"]
+        or emi_bounced == True
+        or missed_emi >= 2
     )
+
+    print(
+        f"[Rules] salary_delay={salary_delay}(>3:{salary_delay > 3}) "
+        f"auto_debit={auto_debit}(>=2:{auto_debit >= 2}) "
+        f"savings_drawdown={savings_drawdown}(<-20:{savings_drawdown < -20.0}) "
+        f"triggered={triggered}"
+    )
+
+    return triggered
+
 
 def fire_intervention(record: dict):
     """Pass raw Kafka message to API — predict() computes score there, not here."""
@@ -56,12 +93,49 @@ def fire_intervention(record: dict):
         print(f"[Trigger] {record['customer_id']} → HTTP {response.status_code}")
     except Exception as e:
         print(f"[Trigger] Failed for {record['customer_id']}: {e}")
-        # Never raise — consumer must not crash because API is slow or down
+
+
+def push_event(record: dict, stage: str, triggered: bool | None = None, risk_score: float | None = None, agent_result: dict | None = None):
+    """Helper to push granular events to SSE."""
+    event = {
+        "customer_id": record["customer_id"],
+        "stage": stage,
+    }
+    if stage != "CUSTOMER_DONE":
+        event["week"] = record.get("observation_week")
+    
+    if triggered is not None:
+        event["triggered"] = triggered
+    
+    if risk_score is not None:
+        event["risk_score"] = risk_score
+
+    if agent_result is not None:
+        event["agent_result"] = agent_result
+        
+    if stage in ["INGEST", "INGEST_TRIGGERED"]:
+        event["balance"] = float(record.get("avg_daily_balance_inr", 0))
+        event["salary_delay"] = int(record.get("salary_delay_days", 0))
+        event["archetype"] = record.get("customer_segment", "Unknown")
+        
+    if stage == "OUTREACH":
+        if risk_score is not None:
+            if risk_score >= 0.7:
+                event["global_risk"] = "HIGH"
+            elif risk_score >= 0.4:
+                event["global_risk"] = "MEDIUM"
+            else:
+                event["global_risk"] = "LOW"
+        else:
+            event["global_risk"] = "LOW"
+            
+    publish_event(event)
 
 
 def insert_into_postgres(record: dict):
     with get_connection() as conn:
-        conn.execute(text("""
+        conn.execute(
+            text("""
             INSERT INTO raw_observations_staging (
                 customer_id, observation_week, age, customer_segment,
                 geography_zone, product_type, account_vintage_months,
@@ -106,9 +180,12 @@ def insert_into_postgres(record: dict):
                 :external_shock_flag, :shock_type
             )
             ON CONFLICT (customer_id, observation_week) DO NOTHING
-        """), record)
+        """),
+            record,
+        )
 
-        conn.execute(text("""
+        conn.execute(
+            text("""
             INSERT INTO customers (
                 customer_id, age, customer_segment, geography_zone,
                 product_type, account_vintage_months, emi_to_income_ratio
@@ -118,9 +195,12 @@ def insert_into_postgres(record: dict):
             )
             ON CONFLICT (customer_id) DO UPDATE
                 SET updated_at = NOW()
-        """), record)
+        """),
+            record,
+        )
 
-        conn.execute(text("""
+        conn.execute(
+            text("""
             INSERT INTO weekly_features (
                 customer_id, observation_week, salary_delay_days,
                 salary_drop_pct, avg_daily_balance_inr, balance_trend_pct,
@@ -161,13 +241,17 @@ def insert_into_postgres(record: dict):
                 :external_shock_flag, :shock_type
             )
             ON CONFLICT (customer_id, observation_week) DO NOTHING
-        """), record)
+        """),
+            record,
+        )
 
         conn.commit()
 
 
 def insert_into_cassandra(record: dict):
-    cassandra_session.execute("""
+    session = get_cassandra_session()
+    session.execute(
+        """
         INSERT INTO weekly_feature_snapshots (
             customer_id, observation_week, salary_delay_days,
             salary_drop_pct, avg_daily_balance_inr, balance_trend_pct,
@@ -195,50 +279,52 @@ def insert_into_cassandra(record: dict):
             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
             %s, %s
         ) IF NOT EXISTS
-    """, (
-        record["customer_id"],
-        datetime.strptime(record["observation_week"], "%Y-%m-%d").date(),
-        record["salary_delay_days"],
-        record["salary_drop_pct"],
-        record["avg_daily_balance_inr"],
-        record["balance_trend_pct"],
-        record["net_cashflow_ratio"],
-        record["savings_drawdown_pct"],
-        record["savings_withdrawal_count"],
-        record["utility_payment_delay_days"],
-        record["num_bills_paid_late_last_4w"],
-        record["discretionary_spend_inr"],
-        record["discretionary_vs_4w_avg_pct"],
-        record["gambling_lottery_spend_inr"],
-        record["gambling_4w_change_pct"],
-        record["upi_to_lending_apps_count"],
-        record["upi_to_lending_apps_amount_inr"],
-        record["atm_vs_4w_avg_pct"],
-        record["auto_debit_failures"],
-        record["credit_card_utilization_pct"],
-        record["credit_inquiries_last_30d"],
-        bool(record["paying_minimum_only_flag"]),
-        record["mobile_app_logins"],
-        record["financial_stress_queries"],
-        record["customer_service_calls"],
-        bool(record["will_default_next_2_4_weeks"]),
-        float(record.get("monthly_income_inr", 0.0)),
-        float(record.get("emi_amount_inr", 0.0)),
-        bool(record.get("emi_due_this_week", False)),
-        float(record.get("available_funds_inr", 0.0)),
-        bool(record.get("emi_paid_flag", False)),
-        bool(record.get("emi_bounced_flag", False)),
-        int(record.get("missed_emi_count_rolling", 0)),
-        float(record.get("balance_velocity", 0.0)),
-        float(record.get("salary_delay_delta", 0.0)),
-        float(record.get("discretionary_velocity", 0.0)),
-        float(record.get("upi_lending_delta", 0.0)),
-        float(record.get("savings_drawdown_velocity", 0.0)),
-        bool(record.get("external_shock_flag", False)),
-        record.get("shock_type", ""),
-        record.get("source", "dataset_seed"),
-        datetime.utcnow()
-    ))
+    """,
+        (
+            record["customer_id"],
+            datetime.strptime(record["observation_week"], "%Y-%m-%d").date(),
+            record["salary_delay_days"],
+            record["salary_drop_pct"],
+            record["avg_daily_balance_inr"],
+            record["balance_trend_pct"],
+            record["net_cashflow_ratio"],
+            record["savings_drawdown_pct"],
+            record["savings_withdrawal_count"],
+            record["utility_payment_delay_days"],
+            record["num_bills_paid_late_last_4w"],
+            record["discretionary_spend_inr"],
+            record["discretionary_vs_4w_avg_pct"],
+            record["gambling_lottery_spend_inr"],
+            record["gambling_4w_change_pct"],
+            record["upi_to_lending_apps_count"],
+            record["upi_to_lending_apps_amount_inr"],
+            record["atm_vs_4w_avg_pct"],
+            record["auto_debit_failures"],
+            record["credit_card_utilization_pct"],
+            record["credit_inquiries_last_30d"],
+            bool(record["paying_minimum_only_flag"]),
+            record["mobile_app_logins"],
+            record["financial_stress_queries"],
+            record["customer_service_calls"],
+            bool(record["will_default_next_2_4_weeks"]),
+            float(record.get("monthly_income_inr", 0.0)),
+            float(record.get("emi_amount_inr", 0.0)),
+            bool(record.get("emi_due_this_week", False)),
+            float(record.get("available_funds_inr", 0.0)),
+            bool(record.get("emi_paid_flag", False)),
+            bool(record.get("emi_bounced_flag", False)),
+            int(record.get("missed_emi_count_rolling", 0)),
+            float(record.get("balance_velocity", 0.0)),
+            float(record.get("salary_delay_delta", 0.0)),
+            float(record.get("discretionary_velocity", 0.0)),
+            float(record.get("upi_lending_delta", 0.0)),
+            float(record.get("savings_drawdown_velocity", 0.0)),
+            bool(record.get("external_shock_flag", False)),
+            record.get("shock_type", ""),
+            record.get("source", "dataset_seed"),
+            datetime.utcnow(),
+        ),
+    )
 
 
 def insert_into_db(record: dict):
@@ -253,24 +339,113 @@ def insert_into_db(record: dict):
         print(f"[Cassandra] Insert failed for {record.get('customer_id')}: {e}")
 
 
-triggered = set()
+def run_consumer():
+    """Main consumer loop - call this to start consuming from Kafka."""
+    try:
+        cons = get_consumer()
 
-for message in consumer:
-    record = message.value
-    customer_id = record["customer_id"]
+        # Reset offset to beginning for fresh start (demo purposes)
+        print("[Consumer] Resetting offset to beginning for fresh start...")
+        for partition in cons.assignment() or []:
+            cons.seek_to_beginning(partition)
 
-    print(f"customer={customer_id} | "
-          f"week={record['observation_week']} | "
-          f"salary_delay={record['salary_delay_days']}d | "
-          f"balance=₹{float(record['avg_daily_balance_inr']):,.0f} | "
-          f"auto_debit_failures={record['auto_debit_failures']} | "
-          f"default_risk={record['will_default_next_2_4_weeks']}")
+        print(f"[Consumer] Listening on topic '{KAFKA_TOPIC}'...\n")
 
-    insert_into_db(record)
+        last_customer_id = None
 
-    from db.redis_client import invalidate_customer
-    invalidate_customer(customer_id)  # fresh data arrived, bust cache
+        for message in cons:
+            record = message.value
+            customer_id = record["customer_id"]
 
-    if should_trigger(record) and customer_id not in triggered:
-        triggered.add(customer_id)
-        fire_intervention(record)
+            if last_customer_id and customer_id != last_customer_id:
+                push_event({"customer_id": last_customer_id}, "CUSTOMER_DONE")
+            last_customer_id = customer_id
+
+            # Check rules FIRST
+            triggered = should_trigger(record)
+            
+            # Step 1: INGEST
+            push_event(record, "INGEST", triggered=triggered)
+
+            print(
+                f"customer={customer_id} | "
+                f"week={record['observation_week']} | "
+                f"salary_delay={record['salary_delay_days']}d | "
+                f"balance=₹{float(record['avg_daily_balance_inr']):,.0f} | "
+                f"auto_debit_failures={record['auto_debit_failures']} | "
+                f"default_risk={record['will_default_next_2_4_weeks']}"
+            )
+
+            print(f"[Consumer] Rules check: triggered={triggered}")
+
+            if triggered:
+                push_event(record, "INGEST_TRIGGERED", triggered=True)
+                # Route: ingest → predict → intervene
+                try:
+                    ingest_resp = httpx.post(
+                        f"{API_BASE}/ingest", json=record, timeout=60.0
+                    )
+                    print(
+                        f"[Consumer] DB stored: {customer_id} → {ingest_resp.status_code}"
+                    )
+                except Exception as e:
+                    print(f"[Consumer Error] Ingest failed for {customer_id}: {e}")
+                    continue
+
+                try:
+                    predict_resp = httpx.post(
+                        f"{API_BASE}/predict", json=record, timeout=60.0
+                    )
+                    ml_result = predict_resp.json()
+                    risk_score = ml_result.get("risk_score")
+                    print(
+                        f"[Consumer] ML completed: {customer_id} → risk={risk_score}"
+                    )
+                    push_event(record, "SCORE", risk_score=risk_score, triggered=True)
+                except Exception as e:
+                    print(f"[Consumer Error] Predict failed for {customer_id}: {e}")
+                    continue
+
+                try:
+                    intervene_resp = httpx.post(
+                        f"{API_BASE}/intervene/{customer_id}",
+                        json={"kafka_message": record, "ml_result": ml_result},
+                        timeout=120.0,
+                    )
+                    agent_result = intervene_resp.json()
+                    print(
+                        f"[Consumer] Agents completed: {customer_id} → {intervene_resp.status_code}"
+                    )
+                    # Push result in ANALYSE and OUTREACH stages
+                    push_event(record, "ANALYSE", risk_score=risk_score, agent_result=agent_result, triggered=True)
+                    push_event(record, "OUTREACH", risk_score=risk_score, agent_result=agent_result, triggered=True)
+                except Exception as e:
+                    print(f"[Consumer Error] Intervene failed for {customer_id}: {e}")
+            else:
+                # Route: ingest only (DB persistence, no ML, no agents)
+                push_event(record, "SKIPPED", triggered=False)
+                try:
+                    ingest_resp = httpx.post(
+                        f"{API_BASE}/ingest", json=record, timeout=60.0
+                    )
+                    print(
+                        f"[Consumer] DB stored (not triggered): {customer_id} → {ingest_resp.status_code}"
+                    )
+                except Exception as e:
+                    print(f"[Consumer Error] Ingest failed for {customer_id}: {e}")
+
+            # Commit Kafka offset after successful processing
+            try:
+                cons.commit()
+            except Exception as e:
+                print(f"[Consumer] Offset commit failed: {e}")
+
+    except KeyboardInterrupt:
+        print("[Consumer] Shutting down...")
+    except Exception as e:
+        print(f"[Consumer] Fatal error: {e}")
+        raise
+
+
+if __name__ == "__main__":
+    run_consumer()

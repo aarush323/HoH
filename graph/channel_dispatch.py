@@ -105,7 +105,8 @@ def channel_dispatch_node(state: Main_context) -> dict:
     channel = select_channel(state)
 
     # --- ALWAYS GENERATE AND PRINT FOR TESTING ---
-    offer_detail = state.get("voice_payload", {}).get("offer_detail", "an extension")
+    voice_payload = state.get("voice_payload") or {}
+    offer_detail = voice_payload.get("offer_detail", "an extension")
     formatted_sms = format_sms(name, offer_detail)
     whatsapp_msg = format_whatsapp(name, intervention, message_content)
     

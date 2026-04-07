@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Shock Events | HoH Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-variant": "#e2e2e2",
+              "outline-variant": "#c3c6d7",
+              "secondary-fixed": "#dbe1ff",
+              "on-primary-container": "#eeefff",
+              "surface-container-low": "#f3f3f3",
+              "on-surface-variant": "#434655",
+              "secondary-fixed-dim": "#b4c5ff",
+              "inverse-primary": "#b4c5ff",
+              "inverse-surface": "#2f3131",
+              "error-container": "#ffdad6",
+              "on-error": "#ffffff",
+              "tertiary-fixed": "#ffdbcd",
+              "outline": "#737686",
+              "tertiary-container": "#bc4800",
+              "primary-fixed-dim": "#b4c5ff",
+              "surface": "#f9f9f9",
+              "on-secondary": "#ffffff",
+              "on-secondary-fixed-variant": "#31447b",
+              "surface-container-highest": "#e2e2e2",
+              "secondary-container": "#acbfff",
+              "on-tertiary": "#ffffff",
+              "primary-container": "#2563eb",
+              "on-error-container": "#93000a",
+              "surface-container": "#eeeeee",
+              "tertiary-fixed-dim": "#ffb596",
+              "surface-container-high": "#e8e8e8",
+              "on-background": "#1a1c1c",
+              "on-secondary-fixed": "#00174b",
+              "background": "#f9f9f9",
+              "error": "#ba1a1a",
+              "on-tertiary-fixed-variant": "#7d2d00",
+              "surface-dim": "#dadada",
+              "tertiary": "#943700",
+              "on-tertiary-fixed": "#360f00",
+              "on-secondary-container": "#394c84",
+              "on-primary": "#ffffff",
+              "on-primary-fixed-variant": "#003ea8",
+              "primary-fixed": "#dbe1ff",
+              "surface-container-lowest": "#ffffff",
+              "surface-bright": "#f9f9f9",
+              "secondary": "#495c95",
+              "primary": "#004ac6",
+              "surface-tint": "#0053db",
+              "on-tertiary-container": "#ffede6",
+              "on-primary-fixed": "#00174b",
+              "on-surface": "#1a1c1c",
+              "inverse-on-surface": "#f0f1f1"
+            },
+            fontFamily: {
+              "headline": ["Inter"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #f9f9f9; color: #1a1c1c; }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
+        .glass-header { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(20px); }
+    </style>
+</head>
+<body class="antialiased">
+<!-- TopNavBar (Shared Component) -->
+<nav class="fixed top-0 w-full z-50 glass-header shadow-sm shadow-blue-900/5 h-20">
+<div class="flex justify-between items-center h-full px-8 w-full max-w-[1920px] mx-auto">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-black tracking-tighter text-slate-900">HoH</span>
+<div class="hidden md:flex gap-6 items-center h-full">
+<a class="text-slate-500 hover:text-slate-900 text-sm font-medium transition-colors" href="#">Dashboard</a>
+<a class="text-slate-500 hover:text-slate-900 text-sm font-medium transition-colors" href="#">Live Feed</a>
+<a class="text-slate-500 hover:text-slate-900 text-sm font-medium transition-colors" href="#">Customer Journey</a>
+<a class="text-slate-500 hover:text-slate-900 text-sm font-medium transition-colors" href="#">Portfolio</a>
+<a class="text-blue-600 border-b-2 border-blue-600 pb-1 mt-1 text-sm font-medium" href="#">Shock Events</a>
+<a class="text-slate-500 hover:text-slate-900 text-sm font-medium transition-colors" href="#">Outreach</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-slate-50 rounded-lg transition-all text-slate-500"><span class="material-symbols-outlined" data-icon="sensors">sensors</span></button>
+<button class="p-2 hover:bg-slate-50 rounded-lg transition-all text-slate-500"><span class="material-symbols-outlined" data-icon="database">database</span></button>
+<button class="p-2 hover:bg-slate-50 rounded-lg transition-all text-slate-500"><span class="material-symbols-outlined" data-icon="memory">memory</span></button>
+<div class="w-8 h-8 rounded-full bg-slate-200 overflow-hidden ml-2">
+<img alt="User profile" data-alt="Professional male profile portrait circular crop" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWznXbBbODHBk_OTOAnqBpTCPwEC31wKT5PePCBFPrSaDPXthmt_24Cg4MCqxXUTr6p4jpKTQWJjQNaovQ9A0KiXaI21hT0w83LwrDrc1u1eEUl_zcnJzaLiAjuo1SFvfuKJ6hM0ciVRTZ8vTOajhry2LRAs-xKvTIOL8zlAoL0YY_LjXI22uCvoQtjJT8vN_5lZe8aIcxIbHc_An8cyQZlYfl8W8KOOSlgT4ics9WBHLBnDZBSvcniSz4cyL7j02-dpd95cNeNCxa"/>
+</div>
+</div>
+</div>
+<div class="bg-slate-100/50 h-[1px] w-full absolute bottom-0"></div>
+</nav>
+<main class="pt-28 pb-12 px-8 max-w-[1920px] mx-auto">
+<!-- Amber Warning Banner -->
+<div class="mb-8 flex items-center justify-between bg-[#fffbeb] border border-[#fef3c7] p-4 rounded-xl shadow-sm animate-pulse">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-amber-600" data-icon="warning">warning</span>
+<p class="text-amber-900 font-medium text-sm">External Shock Detected: <span class="font-bold">Income Shock</span> affecting 47 customers in North Zone</p>
+</div>
+<button class="text-amber-500 hover:text-amber-700 transition-colors p-1">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+</div>
+<!-- Upper Grid: Map & Bar Chart -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-8">
+<!-- India Schematic Map Container -->
+<div class="lg:col-span-7 bg-surface-container-lowest rounded-2xl p-8 shadow-sm border border-outline-variant/15">
+<div class="flex justify-between items-center mb-6">
+<h2 class="text-lg font-bold tracking-tight text-on-surface">Regional Impact Hotspots</h2>
+<div class="flex gap-2">
+<span class="flex items-center gap-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase"><div class="w-2 h-2 rounded-full bg-error"></div> High Risk</span>
+<span class="flex items-center gap-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase"><div class="w-2 h-2 rounded-full bg-emerald-500"></div> Low Risk</span>
+</div>
+</div>
+<div class="relative w-full aspect-[4/3] bg-surface flex items-center justify-center rounded-xl overflow-hidden border border-outline-variant/10">
+<!-- Abstract Schematic Map UI -->
+<div class="relative w-72 h-96">
+<!-- North -->
+<div class="absolute top-0 left-1/4 w-32 h-24 bg-error/90 rounded-lg flex items-center justify-center cursor-pointer hover:scale-105 transition-transform shadow-lg border-2 border-white/20">
+<span class="text-white text-[10px] font-bold uppercase tracking-widest">North</span>
+</div>
+<!-- West -->
+<div class="absolute top-24 left-0 w-24 h-32 bg-amber-500/80 rounded-lg flex items-center justify-center cursor-pointer hover:scale-105 transition-transform shadow-md border-2 border-white/20">
+<span class="text-white text-[10px] font-bold uppercase tracking-widest">West</span>
+</div>
+<!-- Central -->
+<div class="absolute top-28 left-28 w-24 h-24 bg-amber-400/80 rounded-lg flex items-center justify-center cursor-pointer hover:scale-105 transition-transform shadow-md border-2 border-white/20">
+<span class="text-white text-[10px] font-bold uppercase tracking-widest">Central</span>
+</div>
+<!-- East -->
+<div class="absolute top-24 right-0 w-20 h-28 bg-emerald-400/80 rounded-lg flex items-center justify-center cursor-pointer hover:scale-105 transition-transform shadow-md border-2 border-white/20">
+<span class="text-white text-[10px] font-bold uppercase tracking-widest">East</span>
+</div>
+<!-- South -->
+<div class="absolute bottom-0 left-20 w-32 h-36 bg-emerald-600/80 rounded-lg flex items-center justify-center cursor-pointer hover:scale-105 transition-transform shadow-md border-2 border-white/20">
+<span class="text-white text-[10px] font-bold uppercase tracking-widest">South</span>
+</div>
+</div>
+<!-- Decorative Map Elements -->
+<div class="absolute inset-0 opacity-10 pointer-events-none" style="background-image: radial-gradient(circle, #000 1px, transparent 1px); background-size: 20px 20px;"></div>
+</div>
+</div>
+<!-- Shock Type Distribution -->
+<div class="lg:col-span-5 flex flex-col gap-8">
+<div class="bg-surface-container-lowest rounded-2xl p-8 shadow-sm border border-outline-variant/15 flex-1">
+<h2 class="text-lg font-bold tracking-tight text-on-surface mb-8">Shock Distribution</h2>
+<div class="space-y-6">
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
+<span>Income Shock</span>
+<span class="tabular-nums">47</span>
+</div>
+<div class="h-3 bg-surface rounded-full overflow-hidden">
+<div class="h-full bg-error rounded-full" style="width: 75%"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
+<span>Payment Shock</span>
+<span class="tabular-nums">23</span>
+</div>
+<div class="h-3 bg-surface rounded-full overflow-hidden">
+<div class="h-full bg-amber-500 rounded-full" style="width: 40%"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
+<span>Savings Shock</span>
+<span class="tabular-nums">18</span>
+</div>
+<div class="h-3 bg-surface rounded-full overflow-hidden">
+<div class="h-full bg-blue-500 rounded-full" style="width: 32%"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
+<span>None</span>
+<span class="tabular-nums">254</span>
+</div>
+<div class="h-3 bg-surface rounded-full overflow-hidden">
+<div class="h-full bg-slate-200 rounded-full" style="width: 100%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Threshold Config Panel -->
+<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/10">
+<h3 class="text-sm font-bold tracking-tight text-on-surface mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="settings">settings</span>
+                        Threshold Configuration
+                    </h3>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-white p-3 rounded-xl border border-outline-variant/10">
+<span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Salary Delay</span>
+<span class="text-sm font-bold tabular-nums">3 Days</span>
+</div>
+<div class="bg-white p-3 rounded-xl border border-outline-variant/10">
+<span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Auto-Debit Fail</span>
+<span class="text-sm font-bold tabular-nums">2 Events</span>
+</div>
+<div class="bg-white p-3 rounded-xl border border-outline-variant/10">
+<span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Savings Drawdown</span>
+<span class="text-sm font-bold tabular-nums">-20.0%</span>
+</div>
+<div class="bg-white p-3 rounded-xl border border-outline-variant/10">
+<span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Utility Delay</span>
+<span class="text-sm font-bold tabular-nums">3 Days</span>
+</div>
+</div>
+<p class="text-[10px] text-slate-500 mt-4 italic">Editable by Risk Admin</p>
+</div>
+</div>
+</div>
+<!-- Risk Spike Timeline -->
+<div class="bg-surface-container-lowest rounded-2xl p-8 shadow-sm border border-outline-variant/15 mb-8">
+<h2 class="text-lg font-bold tracking-tight text-on-surface mb-8">Portfolio Risk Spike Timeline</h2>
+<div class="relative h-64 w-full flex items-end justify-between px-4">
+<!-- Grid Lines -->
+<div class="absolute inset-0 border-b border-outline-variant/20 flex flex-col justify-between">
+<div class="w-full border-t border-dashed border-outline-variant/10 h-0"></div>
+<div class="w-full border-t border-dashed border-outline-variant/10 h-0"></div>
+<div class="w-full border-t border-dashed border-outline-variant/10 h-0"></div>
+<div class="w-full border-t border-dashed border-outline-variant/10 h-0"></div>
+</div>
+<!-- Timeline Points (Simplified Line Representation) -->
+<div class="absolute inset-0 flex items-center px-4">
+<svg class="w-full h-full overflow-visible" viewbox="0 0 1000 200">
+<!-- Risk Line -->
+<path d="M 0 160 L 100 155 L 200 162 L 300 158 L 333 158 L 333 80 L 400 95 L 500 105 L 600 110 L 666 110 L 666 40 L 800 55 L 900 65 L 1000 60" fill="none" stroke="#004ac6" stroke-linejoin="round" stroke-width="3"></path>
+<!-- Area Fill -->
+<path d="M 0 160 L 100 155 L 200 162 L 300 158 L 333 158 L 333 80 L 400 95 L 500 105 L 600 110 L 666 110 L 666 40 L 800 55 L 900 65 L 1000 60 V 200 H 0 Z" fill="url(#grad1)" opacity="0.1"></path>
+<defs>
+<lineargradient id="grad1" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color:#004ac6;stop-opacity:1"></stop>
+<stop offset="100%" style="stop-color:#fff;stop-opacity:0"></stop>
+</lineargradient>
+</defs>
+<!-- Markers -->
+<line stroke="#EF4444" stroke-dasharray="4" stroke-width="1.5" x1="333" x2="333" y1="0" y2="200"></line>
+<line stroke="#EF4444" stroke-dasharray="4" stroke-width="1.5" x1="666" x2="666" y1="0" y2="200"></line>
+</svg>
+</div>
+<!-- Marker Labels -->
+<div class="absolute top-0 left-[33.3%] -ml-12 bg-error text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg uppercase tracking-wider">Major Shock A</div>
+<div class="absolute top-0 left-[66.6%] -ml-12 bg-error text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg uppercase tracking-wider">Major Shock B</div>
+<!-- X-Axis Labels -->
+<div class="w-full flex justify-between absolute -bottom-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4">
+<span>Week 01</span>
+<span>Week 03</span>
+<span>Week 05</span>
+<span>Week 07</span>
+<span>Week 09</span>
+<span>Week 11</span>
+</div>
+</div>
+</div>
+<!-- Affected Customers Table -->
+<div class="bg-surface-container-lowest rounded-2xl shadow-sm border border-outline-variant/15 overflow-hidden">
+<div class="p-8 border-b border-outline-variant/10 flex justify-between items-center">
+<h2 class="text-lg font-bold tracking-tight text-on-surface">Affected Customers <span class="ml-2 px-2 py-0.5 bg-surface text-slate-500 rounded text-xs font-medium tabular-nums">47</span></h2>
+<div class="flex gap-3">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" data-icon="search">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 w-64" placeholder="Filter customers..." type="text"/>
+</div>
+<button class="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface-container-high rounded-full text-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="filter_list">filter_list</span>
+                        Sort
+                    </button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="text-[10px] font-bold uppercase tracking-widest text-slate-400 bg-surface">
+<th class="px-8 py-4">Customer ID</th>
+<th class="px-8 py-4">Shock Type</th>
+<th class="px-8 py-4">Risk Score</th>
+<th class="px-8 py-4">Zone</th>
+<th class="px-8 py-4">Product Type</th>
+<th class="px-8 py-4 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/5">
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-8 py-5 text-sm font-bold text-primary group-hover:underline cursor-pointer">C-82910</td>
+<td class="px-8 py-5">
+<span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-error-container text-on-error-container">Income Shock</span>
+</td>
+<td class="px-8 py-5 text-sm tabular-nums font-medium text-error">8.2 / 10</td>
+<td class="px-8 py-5 text-sm">North</td>
+<td class="px-8 py-5 text-sm text-slate-500">Unsecured Credit</td>
+<td class="px-8 py-5 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span></button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-8 py-5 text-sm font-bold text-primary group-hover:underline cursor-pointer">C-11029</td>
+<td class="px-8 py-5">
+<span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-error-container text-on-error-container">Income Shock</span>
+</td>
+<td class="px-8 py-5 text-sm tabular-nums font-medium text-error">7.9 / 10</td>
+<td class="px-8 py-5 text-sm">North</td>
+<td class="px-8 py-5 text-sm text-slate-500">Auto Loan</td>
+<td class="px-8 py-5 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span></button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-8 py-5 text-sm font-bold text-primary group-hover:underline cursor-pointer">C-99212</td>
+<td class="px-8 py-5">
+<span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800">Payment Shock</span>
+</td>
+<td class="px-8 py-5 text-sm tabular-nums font-medium text-amber-600">6.4 / 10</td>
+<td class="px-8 py-5 text-sm">West</td>
+<td class="px-8 py-5 text-sm text-slate-500">Micro-Credit</td>
+<td class="px-8 py-5 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span></button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-8 py-5 text-sm font-bold text-primary group-hover:underline cursor-pointer">C-44031</td>
+<td class="px-8 py-5">
+<span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-error-container text-on-error-container">Income Shock</span>
+</td>
+<td class="px-8 py-5 text-sm tabular-nums font-medium text-error">9.1 / 10</td>
+<td class="px-8 py-5 text-sm">North</td>
+<td class="px-8 py-5 text-sm text-slate-500">Unsecured Credit</td>
+<td class="px-8 py-5 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span></button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-8 py-5 text-sm font-bold text-primary group-hover:underline cursor-pointer">C-55612</td>
+<td class="px-8 py-5">
+<span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800">Savings Shock</span>
+</td>
+<td class="px-8 py-5 text-sm tabular-nums font-medium text-slate-600">4.2 / 10</td>
+<td class="px-8 py-5 text-sm">South</td>
+<td class="px-8 py-5 text-sm text-slate-500">Housing Loan</td>
+<td class="px-8 py-5 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span></button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-8 py-5 text-sm font-bold text-primary group-hover:underline cursor-pointer">C-22109</td>
+<td class="px-8 py-5">
+<span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-error-container text-on-error-container">Income Shock</span>
+</td>
+<td class="px-8 py-5 text-sm tabular-nums font-medium text-error">8.5 / 10</td>
+<td class="px-8 py-5 text-sm">North</td>
+<td class="px-8 py-5 text-sm text-slate-500">Personal Loan</td>
+<td class="px-8 py-5 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span></button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-8 py-5 text-sm font-bold text-primary group-hover:underline cursor-pointer">C-33491</td>
+<td class="px-8 py-5">
+<span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800">Payment Shock</span>
+</td>
+<td class="px-8 py-5 text-sm tabular-nums font-medium text-amber-600">5.9 / 10</td>
+<td class="px-8 py-5 text-sm">Central</td>
+<td class="px-8 py-5 text-sm text-slate-500">Business Loan</td>
+<td class="px-8 py-5 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span></button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-8 py-5 text-sm font-bold text-primary group-hover:underline cursor-pointer">C-77123</td>
+<td class="px-8 py-5">
+<span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-error-container text-on-error-container">Income Shock</span>
+</td>
+<td class="px-8 py-5 text-sm tabular-nums font-medium text-error">7.2 / 10</td>
+<td class="px-8 py-5 text-sm">North</td>
+<td class="px-8 py-5 text-sm text-slate-500">Micro-Credit</td>
+<td class="px-8 py-5 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-4 bg-surface flex justify-center">
+<button class="text-[10px] font-bold text-primary uppercase tracking-widest hover:bg-white px-6 py-2 rounded-full border border-primary/20 transition-all">Load More Customers</button>
+</div>
+</div>
+</main>
+</body></html>

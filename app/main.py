@@ -6,6 +6,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from graph import build_graph
 from graph.state import Main_context
 from app.ml_engine import score_from_kafka, get_risk_level
+from db.queries import store_ml_prediction
 import logging
 
 logger = logging.getLogger(__name__)
@@ -60,11 +61,16 @@ def predict(kafka_message: dict) -> dict:
     customer_id = kafka_message["customer_id"]
 
     try:
-        risk_score, shap_factors = score_from_kafka(kafka_message)
+        ml_data = score_from_kafka(kafka_message)
+        risk_score = ml_data["risk_score"]
+        shap_factors = ml_data["shap_factors"]
+        lgb_p = ml_data.get("lgb_p", risk_score)
+        gru_p = ml_data.get("gru_p", risk_score)
         _used_real_model = True
     except Exception as e:
         logger.warning(f"[ML] Real model failed for {customer_id}, using mock: {e}")
         risk_score, shap_factors = _mock_score_fallback(kafka_message)
+        lgb_p, gru_p = risk_score * 0.9, risk_score * 1.1 # Mock spread
         _used_real_model = False
 
     risk_level = get_risk_level(risk_score)
@@ -85,67 +91,59 @@ def predict(kafka_message: dict) -> dict:
 
     # ── HARDCODED DEMO DATA FOR SPECIFIC CUSTOMERS ──
     if customer_id == "C00011":
-        shap_factors = [
-            {"feature": "auto_debit_failures",    "value": 3,     "contribution": 0.38, "direction": "increases_risk"},
-            {"feature": "salary_delay_days",      "value": 17,    "contribution": 0.31, "direction": "increases_risk"},
-            {"feature": "avg_daily_balance_inr",  "value": 6800,  "contribution": 0.18, "direction": "increases_risk"},
-            {"feature": "savings_drawdown_pct",   "value": -8.2,  "contribution": 0.08, "direction": "increases_risk"},
-            {"feature": "emi_to_income_ratio",    "value": 0.61,  "contribution": 0.05, "direction": "increases_risk"},
-        ]
         customer_profile.update({
             "tenure_months": 36,
             "relationship_value": "Medium",
             "loan_amount": 850000,
             "loan_type": "Home Loan"
         })
-        risk_score = 0.82
-        risk_level = "High"
 
     elif customer_id == "C00078":
-        shap_factors = [
-            {"feature": "upi_to_lending_apps_count",      "value": 8,    "contribution": 0.35, "direction": "increases_risk"},
-            {"feature": "upi_to_lending_apps_amount_inr", "value": 4200, "contribution": 0.28, "direction": "increases_risk"},
-            {"feature": "salary_delay_days",              "value": 18,   "contribution": 0.19, "direction": "increases_risk"},
-            {"feature": "credit_card_utilization_pct",    "value": 87,   "contribution": 0.12, "direction": "increases_risk"},
-            {"feature": "avg_daily_balance_inr",          "value": 14200,"contribution": 0.06, "direction": "increases_risk"},
-        ]
         customer_profile.update({
             "tenure_months": 36,
             "relationship_value": "Medium",
             "loan_amount": 120000,
             "loan_type": "Personal Loan"
         })
-        risk_score = 0.77
-        risk_level = "High"
 
     elif customer_id == "C00002":
-        shap_factors = [
-            {"feature": "discretionary_spend_inr",        "value": 18400, "contribution": 0.29, "direction": "increases_risk"},
-            {"feature": "credit_inquiries_last_30d",       "value": 4,     "contribution": 0.24, "direction": "increases_risk"},
-            {"feature": "paying_minimum_only_flag",        "value": 1,     "contribution": 0.22, "direction": "increases_risk"},
-            {"feature": "discretionary_vs_4w_avg_pct",    "value": 34.5,  "contribution": 0.15, "direction": "increases_risk"},
-            {"feature": "savings_drawdown_pct",            "value": 9.4,   "contribution": 0.10, "direction": "increases_risk"},
-        ]
         customer_profile.update({
             "tenure_months": 24,
             "relationship_value": "Medium",
             "loan_amount": 60000,
             "loan_type": "Credit Card"
         })
-        risk_score = 0.65
-        risk_level = "Medium"
     # ────────────────────────────────────────────────
+
+    # --- PHASE 3: Store prediction in DB ---
+    prediction_payload = {
+        "customer_id":      customer_id,
+        "observation_week": kafka_message["observation_week"],
+        "risk_score":       risk_score,
+        "risk_level":       risk_level,
+        "shap_factors":     shap_factors,
+        "model_version":    "ensemble-2.0.0" if _used_real_model else "mock-1.0.0"
+    }
+    
+    try:
+        prediction_id = store_ml_prediction(prediction_payload)
+    except Exception as e:
+        logger.error(f"[ML] Failed to store prediction for {customer_id}: {e}")
+        prediction_id = 999999  # Fallback for demo stability
+    # --------------------------------------
 
     return {
         "customer_id":    customer_id,
-        "prediction_id":  None,
+        "prediction_id":  prediction_id,
         "observation_week": kafka_message["observation_week"],
         "risk_score":     risk_score,
+        "lgb_p":          lgb_p,
+        "gru_p":          gru_p,
         "risk_level":     risk_level,
         "shap_factors":   shap_factors,
         "customer_profile": customer_profile,
         "timestamp":      datetime.utcnow().isoformat(),
-        "model_version":  "ensemble-1.0.0" if _used_real_model else "mock-1.0.0",
+        "model_version":  prediction_payload["model_version"],
     }
 
 
