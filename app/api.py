@@ -28,6 +28,11 @@ from db.queries import (
     approve_pending_intervention,
     mark_intervention_executed,
     reject_pending_intervention,
+    get_early_warning_signals,
+    get_stress_type_distribution,
+    get_behavioral_metrics,
+    get_external_shocks,
+    get_risk_trend,
 )
 from db.postgres import create_tables_if_not_exist, get_connection
 from sqlalchemy import text
@@ -100,7 +105,10 @@ async def execute_voice_stream(pending_id: int):
     # In-memory lock to prevent duplicate execution within the same process
     with voice_call_lock:
         if pending_id in active_voice_calls:
-            raise HTTPException(status_code=400, detail="Voice call for this intervention is already in progress")
+            raise HTTPException(
+                status_code=400,
+                detail="Voice call for this intervention is already in progress",
+            )
         active_voice_calls.add(pending_id)
 
     event_queue = Queue()
@@ -121,6 +129,7 @@ async def execute_voice_stream(pending_id: int):
             run_call(voice_payload, emit_fn)
         except Exception as e:
             import traceback
+
             print(f"[VOICE-STREAM] Thread crashed: {e}")
             print(traceback.format_exc())
             event_queue.put(("error", {"message": str(e)}))
@@ -155,9 +164,16 @@ async def execute_voice_stream(pending_id: int):
                     # Queue timeout, check if thread is still alive
                     if not call_thread.is_alive():
                         # Thread died without putting an end event or error
-                        if not call_result[0].get("executed") and not call_result[0].get("error"):
-                            print(f"[VOICE-STREAM] Thread died unexpectedly for pending_id={pending_id}")
-                            call_result[0] = {"executed": False, "error": "Thread died unexpectedly"}
+                        if not call_result[0].get("executed") and not call_result[
+                            0
+                        ].get("error"):
+                            print(
+                                f"[VOICE-STREAM] Thread died unexpectedly for pending_id={pending_id}"
+                            )
+                            call_result[0] = {
+                                "executed": False,
+                                "error": "Thread died unexpectedly",
+                            }
                             yield f"event: error\ndata: {json.dumps(call_result[0])}\n\n"
                         break
                     continue
@@ -166,7 +182,7 @@ async def execute_voice_stream(pending_id: int):
                     call_result[0] = {"executed": False, "error": str(loop_err)}
                     yield f"event: error\ndata: {json.dumps(call_result[0])}\n\n"
                     break
-            
+
             # Final event to truly signal end
             yield f"event: call_ended\ndata: {json.dumps({'status': 'stream_closed'})}\n\n"
 
@@ -174,14 +190,13 @@ async def execute_voice_stream(pending_id: int):
             # Release the in-memory lock
             with voice_call_lock:
                 active_voice_calls.discard(pending_id)
-                
+
             # Mark intervention as executed in database
             try:
                 mark_intervention_executed(pending_id, call_result[0])
                 print(f"[VOICE-STREAM] Finished stream for pending_id={pending_id}")
             except Exception as db_err:
                 print(f"[VOICE-STREAM] Failed to mark executed: {db_err}")
-
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -190,6 +205,36 @@ async def execute_voice_stream(pending_id: int):
 def get_stats():
     """Returns aggregated statistics for Dashboard KPIs."""
     return get_dashboard_stats()
+
+
+@app.get("/dashboard/early-warnings")
+def get_early_warnings():
+    """Returns early warning signal counts from weekly features."""
+    return get_early_warning_signals()
+
+
+@app.get("/dashboard/stress-types")
+def get_stress_types():
+    """Returns stress type distribution."""
+    return get_stress_type_distribution()
+
+
+@app.get("/dashboard/behavioral")
+def get_behavioral():
+    """Returns behavioral risk metrics."""
+    return get_behavioral_metrics()
+
+
+@app.get("/dashboard/shocks")
+def get_shocks():
+    """Returns external shock events."""
+    return get_external_shocks()
+
+
+@app.get("/dashboard/risk-trend")
+def get_risk_trend():
+    """Returns weekly risk score trend."""
+    return get_risk_trend()
 
 
 @app.get("/customers/{customer_id}")

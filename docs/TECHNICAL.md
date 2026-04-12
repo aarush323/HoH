@@ -1,0 +1,514 @@
+# Technical Documentation
+
+## 1. System Architecture
+
+```mermaid
+flowchart TD
+    K[Kafka<br/>customer-weekly-observations] --> C[consumer.py<br/>Rule Engine]
+    C --> ML[ML Engine<br/>LightGBM + GRU]
+    ML --> G[LangGraph Workflow]
+    
+    G --> A[analyst_node]
+    A --> Comp[agent2_compliance]
+    Comp --> Int[intervention_agent]
+    Int --> VP[voice_prep_node]
+    VP --> CH[select_channel]
+    
+    CH --> V[voice_agent]
+    CH --> WA[WhatsApp]
+    CH --> EM[Email]
+    
+    V --> DB[PostgreSQL<br/>persist_to_db]
+    DB --> SSE[SSE<br/>Frontend]
+```
+
+## 2. Data Pipeline
+
+### Kafka Topic: customer-weekly-observations
+
+Fields:
+- customer_id, observation_week
+- salary_delay_days, salary_drop_pct
+- auto_debit_failures, savings_drawdown_pct
+- utility_payment_delay_days
+- credit_card_utilization_pct
+- emi_bounced_flag, missed_emi_count_rolling
+- monthly_income_inr, emi_amount_inr, available_funds_inr
+- upi_to_lending_apps_count, gambling_lottery_spend_inr
+- discretionary_vs_4w_avg_pct
+- external_shock_flag, shock_type
+
+### Trigger Rules (pipeline/consumer.py)
+
+```mermaid
+flowchart TD
+    R[record] --> A{salary_delay<br/>> 3}
+    A -->|yes| T[TRIGGER]
+    A -->|no| B{auto_debit<br/>>= 2}
+    B -->|yes| T
+    B -->|no| C{savings_drawdown<br/>< -20%}
+    C -->|yes| T
+    C -->|no| D{utility_delay<br/>> 3}
+    D -->|yes| T
+    D -->|no| E{emi_bounced<br/>== True}
+    E -->|yes| T
+    E -->|no| F{missed_emi<br/>>= 2}
+    F -->|yes| T
+    F -->|no| NT[NO TRIGGER]
+```
+
+```python
+def should_trigger(record: dict) -> bool:
+    return (
+        record.get("salary_delay_days", 0) > 3
+        or record.get("auto_debit_failures", 0) >= 2
+        or record.get("savings_drawdown_pct", 0) < -20.0
+        or record.get("utility_payment_delay_days", 0) > 3
+        or record.get("emi_bounced_flag", False) is True
+        or record.get("missed_emi_count_rolling", 0) >= 2
+    )
+```
+
+## 3. ML Engine
+
+### Ensemble Formula
+
+```python
+ensemble_score = 0.6 * lightgbm_prob + 0.4 * gru_prob
+```
+
+### Risk Levels
+
+```mermaid
+flowchart TD
+    S[score] --> H{>= 0.75}
+    H -->|yes| HIGH[HIGH]
+    H -->|no| M{>= 0.50}
+    M -->|yes| MED[MEDIUM]
+    M -->|no| LOW[LOW]
+```
+
+### Fallback Formula (when models unavailable)
+
+```python
+base_score = (
+    (salary_delay / 10) * 0.25 +
+    (auto_debit_fail / 5) * 0.30 +
+    (abs(savings_drawdown) / 100) * 0.25 +
+    (utility_delay / 10) * 0.20
+)
+risk_score = min(0.99, max(0.01, base_score + random_noise))
+```
+
+### SHAP Output
+
+```python
+{
+    "feature": "salary_delay_days",
+    "value": 6,
+    "contribution": 0.182,
+    "direction": "+",
+    "stress_hint": "income"
+}
+```
+
+Top factors: salary_delay_days, savings_drawdown_pct, auto_debit_failures, utility_payment_delay_days
+
+## 4. LangGraph Workflow
+
+### graph/__init__.py
+
+```python
+def build_graph():
+    workflow = StateGraph(Main_context)
+    workflow.add_node("analyst", analyst_node)
+    workflow.add_node("agent2_compliance", agent2_compliance)
+    workflow.add_node("intervention_agent", intervention_agent)
+    workflow.add_node("queue_for_approval", queue_for_approval)
+    workflow.add_node("persist_to_db", persist_to_db_node)
+    
+    workflow.add_edge(START, "analyst")
+    workflow.add_edge("analyst", "agent2_compliance")
+    workflow.add_conditional_edges("agent2_compliance", should_continue, {...})
+    workflow.add_edge("intervention_agent", "queue_for_approval")
+    workflow.add_edge("queue_for_approval", "persist_to_db")
+    workflow.add_edge("persist_to_db", END)
+    
+    return workflow.compile()
+```
+
+### Node: analyst_node (graph/nodes.py:24)
+
+Input: risk_score, risk_level, shap_details
+Output: narrative, stress_type, severity, recommended_action
+
+stress_type values: income_shock, overspending, structural, debt, unknown
+severity values: very high, high, medium, low
+
+### Node: agent2_compliance (graph/nodes.py:124)
+
+Hard stop conditions:
+- fraud_flag == True
+- legal_npa_flag == True
+- existing_restructuring == True
+- kyc_lapsed == True
+
+If hard_stop: store stress_context only, terminate
+
+If total_risk_score < 0.3: return eligible_interventions = ["monitor_only"]
+
+Otherwise: return ranked intervention list per stress type
+
+### Node: intervention_agent (graph/nodes.py:258)
+
+Step 1: Select intervention method from eligible list (LLM)
+Step 2: Generate Message_Tone and Message_content
+
+### Node: voice_prep_node (graph/nodes.py:345)
+
+Builds voice_payload:
+```python
+{
+    "customer_name": "...",
+    "offer_type": "payment_holiday",
+    "offer_detail": "...",
+    "specialist": "...",
+    "tone": "Empathetic",
+    "stress": {"narrative": "...", "severity": "high"},
+    "max_turns": 6,
+    "language_hint": "english",
+    "fallback_message": "..."
+}
+```
+
+### Node: queue_for_approval (graph/nodes.py:662)
+
+Creates pending_intervention record, determines channel via select_channel
+
+### Node: persist_to_db_node (graph/nodes.py:471)
+
+Inserts to: stress_context, interventions, voice_sessions
+
+## 5. Channel Routing (select_channel in graph/nodes.py:608)
+
+```python
+def select_channel(state: dict) -> str:
+    risk_score = state.get("total_risk_score", 0.0)
+    intervention = state.get("Intervention_method")
+    severity = state.get("Stress_context", {}).get("severity")
+    stress_type = state.get("Stress_context", {}).get("stress_type")
+    
+    if intervention == "monitor_only" or risk_score < 0.30:
+        return "none"
+    
+    if risk_score >= 0.85:
+        return "voice"
+    
+    if risk_score >= 0.70 and severity in ["high", "very high"]:
+        return "voice"
+    
+    if risk_score >= 0.60:
+        if "structural" in stress_type or "debt" in stress_type:
+            return "voice"
+        if intervention in ["financial_counseling", "restructuring", "rm_call"]:
+            return "voice"
+        return "whatsapp"
+    
+    if risk_score >= 0.45:
+        return "whatsapp"
+    
+    if risk_score >= 0.30:
+        return "email"
+    
+    return "none"
+```
+
+## 6. Voice Agent (voice_agent/)
+
+### Components
+
+| File | Function |
+|------|---------|
+| agent.py | run_call() - main orchestration |
+| strategy.py | build() - call strategy |
+| speak.py | Text-to-Speech |
+| listen.py | Audio capture |
+| transcribe.py | Speech-to-Text |
+| classify.py | Intent classification |
+| guardrail.py | Output sanitization |
+| utils.py | Logging, trajectory |
+
+### Call Stages (voice_agent/stages.py)
+
+```mermaid
+stateDiagram-v2
+    [*] --> opening
+    opening --> offer_presented
+    offer_presented --> tips_presented
+    tips_presented --> [*]
+```
+
+### Stage Intents
+
+| Stage | Intents |
+|-------|--------|
+| opening | greeting, busy, wrong_number, unclear |
+| offer_presented | accepts_offer, declines, needs_info, wants_to_discuss, unclear |
+| tips_presented | accepts_tips, no_more_help, request_callback, unclear |
+
+### Next Actions
+
+| Intent | Next Action |
+|--------|------------|
+| accepts_offer | close_call |
+| declines | continue/close_call |
+| wants_to_discuss | escalate_counsellor |
+| request_callback | escalate_human |
+| 2x unclear | escalate (exit) |
+
+### SSE Events
+
+call_start, agent_speaking, listening, transcript, intent_detected, stage_change, escalation, guardrail_triggered, call_complete
+
+## 7. Approval Queue
+
+### Status Flow
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING
+    PENDING --> APPROVED: approve
+    PENDING --> REJECTED: reject
+    APPROVED --> EXECUTED: execute
+    EXECUTED --> [*]
+    REJECTED --> [*]
+```
+
+### Endpoints
+
+| Endpoint | Description |
+|----------|------------|
+| POST /pending-approvals/{id}/approve | Approve (voice returns should_stream=true) |
+| POST /pending-approvals/{id}/reject | Reject with reason |
+| GET /voice/execute/{id} | SSE voice execution |
+
+## 8. Database Schema (pipeline/postgre_schema.sql)
+
+### ERD
+
+```mermaid
+erDiagram
+    CUSTOMERS ||--o{ WEEKLY_FEATURES : has
+    CUSTOMERS ||--o{ MODEL_PREDICTIONS : has
+    CUSTOMERS ||--o{ STRESS_CONTEXT : has
+    CUSTOMERS ||--o{ INTERVENTIONS : has
+    CUSTOMERS ||--o{ VOICE_SESSIONS : has
+    
+    MODEL_PREDICTIONS ||--o{ SHAP_EXPLANATIONS : has
+    MODEL_PREDICTIONS ||--o{ STRESS_CONTEXT : has
+    MODEL_PREDICTIONS ||--o{ INTERVENTIONS : has
+    
+    STRESS_CONTEXT ||--o{ INTERVENTIONS : has
+    INTERVENTIONS ||--o{ VOICE_SESSIONS : has
+    
+    CUSTOMERS {
+        string customer_id PK
+        string name
+        string customer_segment
+        string product_type
+        float loan_amount
+        boolean fraud_flag
+        boolean legal_npa_flag
+    }
+    
+    WEEKLY_FEATURES {
+        bigint id PK
+        string customer_id FK
+        date observation_week
+        int salary_delay_days
+        float savings_drawdown_pct
+    }
+    
+    MODEL_PREDICTIONS {
+        bigint id PK
+        string customer_id FK
+        float ensemble_score
+        string risk_band
+    }
+    
+    SHAP_EXPLANATIONS {
+        bigint id PK
+        bigint prediction_id FK
+        string feature_name
+        float shap_value
+    }
+    
+    STRESS_CONTEXT {
+        bigint id PK
+        string customer_id FK
+        text narrative
+        string stress_type
+    }
+    
+    INTERVENTIONS {
+        bigint id PK
+        string customer_id FK
+        string intervention_method
+        string selected_channel
+        string status
+    }
+    
+    VOICE_SESSIONS {
+        bigint id PK
+        bigint intervention_id FK
+        boolean escalate
+        int turns_taken
+    }
+```
+
+### Tables
+
+```sql
+-- customers
+customer_id PK, name, age, customer_segment, product_type, loan_amount,
+relationship_value, fraud_flag, existing_restructuring, legal_npa_flag, kyc_lapsed
+
+-- weekly_features
+id PK, customer_id FK, observation_week,
+salary_delay_days, auto_debit_failures, savings_drawdown_pct,
+credit_card_utilization_pct, emi_bounced_flag, missed_emi_count_rolling, ...
+
+-- model_predictions
+id PK, customer_id FK, observation_week,
+lightgbm_score, gru_score, ensemble_score, risk_band, model_version
+
+-- shap_explanations
+id PK, prediction_id FK, feature_name, shap_value, feature_value, rank
+
+-- stress_context
+id PK, customer_id FK, prediction_id FK,
+narrative, stress_type, severity, recommended_action
+
+-- interventions
+id PK, customer_id FK, prediction_id FK, stress_context_id FK,
+intervention_method, eligible_interventions[], selected_channel,
+message_tone, message_content, hard_stop, status, outcome
+
+-- voice_sessions
+id PK, intervention_id FK, customer_id FK,
+escalate, escalate_reason, outcome, turns_taken, language_detected, call_memory JSONB
+
+-- pending_interventions
+id PK, customer_id FK, risk_score, risk_level, intervention_method,
+channel, message_preview, voice_script_preview, status,
+approved_by, approved_at, rejected_by, rejection_reason
+```
+
+## 9. State Definition (graph/state.py)
+
+```python
+class Main_context(TypedDict):
+    prediction_id: int
+    observation_week: str
+    total_risk_score: float
+    risk_level: str
+    Shap: List[shap]
+    Customer_profile: customer_profile
+    Stress_context: stress_context
+    eligible_interventions: List[str]
+    hard_stop: bool
+    hard_stop_reason: Optional[str]
+    Message_Tone: str
+    Message_content: str
+    Intervention_method: str
+    Intervention_justification: str
+    selected_channel: Optional[str]
+    channel_dispatch_result: Optional[dict]
+    voice_payload: Optional[dict]
+    voice_result: Optional[voice_result]
+
+class shap(TypedDict):
+    feature: str
+    value: float
+    contribution: float
+    direction: str
+
+class customer_profile(TypedDict):
+    customer_id: str
+    name: str
+    tenure_months: float
+    loan_type: str
+    loan_amount: float
+    relationship_value: str
+    fraud_flag: bool
+    existing_restructuring: bool
+    previous_payment_holiday: bool
+    legal_npa_flag: bool
+    kyc_lapsed: bool
+
+class stress_context(TypedDict):
+    narrative: str
+    stress_type: str
+    severity: str
+    recommended_action: Optional[str]
+
+class voice_result(TypedDict):
+    escalate: bool
+    escalate_reason: Optional[str]
+    outcome: str
+    turns_taken: int
+    language_detected: str
+    call_memory: dict
+```
+
+## 10. API Endpoints (app/api.py)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /health | GET | Health check |
+| /dashboard/stats | GET | KPIs |
+| /customers | GET | All customers |
+| /customers/{id} | GET | Customer detail |
+| /score/{id} | GET | ML score + SHAP |
+| /intervene/{id} | POST | Run pipeline |
+| /pending-approvals | GET | Queue |
+| /pending-approvals/{id} | GET | Details |
+| /pending-approvals/{id}/approve | POST | Approve |
+| /pending-approvals/{id}/reject | POST | Reject |
+| /voice/execute/{id} | GET | SSE call |
+| /stream | GET | SSE stream |
+
+## 11. Configuration
+
+### Environment Variables
+
+| Variable | Default |
+|----------|--------|
+| POSTGRES_HOST | localhost |
+| POSTGRES_PORT | 5433 |
+| POSTGRES_DB | pre_delinquency |
+| POSTGRES_USER | admin |
+| POSTGRES_PASSWORD | admin123 |
+| REDIS_HOST | localhost |
+| REDIS_PORT | 6379 |
+| KAFKA_BROKER | 127.0.0.1:9093 |
+| GROQ_API_KEY | - |
+| CEREBRAS_API_KEY | - |
+
+## 12. Docker Services
+
+```yaml
+services:
+  postgres:
+    image: postgres:15
+    ports: [5433:5432]
+  redis:
+    image: redis:7.2
+    ports: [6379:6379]
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    ports: [9093:9093]
+  cassandra:
+    image: cassandra:4.1
+    ports: [9042:9042]
+```
