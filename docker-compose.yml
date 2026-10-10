@@ -3,7 +3,6 @@ version: '3.8'
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
-    container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -14,7 +13,6 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
-    container_name: kafka
     depends_on:
       - zookeeper
     ports:
@@ -31,7 +29,6 @@ services:
 
   redis:
     image: redis:7.2
-    container_name: redis
     ports:
       - "6379:6379"
     networks:
@@ -39,7 +36,6 @@ services:
 
   postgres:
     image: postgres:15
-    container_name: postgres
     ports:
       - "5433:5432"
     environment:
@@ -50,10 +46,46 @@ services:
       - pg_data:/var/lib/postgresql/data
     networks:
       - predelinquency_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d pre_delinquency"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CASSANDRA_HOST: cassandra
+      CASSANDRA_PORT: 9042
+      CASSANDRA_KEYSPACE: predelinquency
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
+    networks:
+      - predelinquency_net
 
   cassandra:
     image: cassandra:4.1
-    container_name: cassandra
     ports:
       - "9042:9042"
     environment:

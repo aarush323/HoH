@@ -6,8 +6,19 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# Initialize Groq client
-client = Groq()
+_groq_client = None
+
+
+def _groq_client_or_none():
+    global _groq_client
+    if _groq_client is not None:
+        return _groq_client
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        return None
+    _groq_client = Groq(api_key=api_key)
+    return _groq_client
+
 
 def quality_check(text: str) -> str:
     words = text.strip().split()
@@ -32,7 +43,11 @@ def transcribe(audio_path: str) -> dict:
     Transcribes actual audio file using Groq's Whisper API.
     """
     logger.info("Transcribing audio...")
-    
+    client = _groq_client_or_none()
+    if client is None:
+        logger.warning("GROQ_API_KEY not set; transcription unavailable")
+        return {"text": "", "quality": "low"}
+
     try:
         with open(audio_path, "rb") as file:
             transcription = client.audio.transcriptions.create(

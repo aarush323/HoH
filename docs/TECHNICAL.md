@@ -1,6 +1,8 @@
 # Technical Documentation
 
-## 1. System Architecture
+---
+
+## System Architecture
 
 ```mermaid
 flowchart TD
@@ -22,7 +24,9 @@ flowchart TD
     DB --> SSE[SSE<br/>Frontend]
 ```
 
-## 2. Data Pipeline
+---
+
+## Data Pipeline
 
 ### Kafka Topic: customer-weekly-observations
 
@@ -38,7 +42,7 @@ Fields:
 - discretionary_vs_4w_avg_pct
 - external_shock_flag, shock_type
 
-### Trigger Rules (pipeline/consumer.py)
+### Trigger Rules
 
 ```mermaid
 flowchart TD
@@ -69,7 +73,9 @@ def should_trigger(record: dict) -> bool:
     )
 ```
 
-## 3. ML Engine
+---
+
+## ML Engine
 
 ### Ensemble Formula
 
@@ -114,7 +120,9 @@ risk_score = min(0.99, max(0.01, base_score + random_noise))
 
 Top factors: salary_delay_days, savings_drawdown_pct, auto_debit_failures, utility_payment_delay_days
 
-## 4. LangGraph Workflow
+---
+
+## LangGraph Workflow
 
 ### graph/__init__.py
 
@@ -189,7 +197,9 @@ Creates pending_intervention record, determines channel via select_channel
 
 Inserts to: stress_context, interventions, voice_sessions
 
-## 5. Channel Routing (select_channel in graph/nodes.py:608)
+---
+
+## Channel Routing
 
 ```python
 def select_channel(state: dict) -> str:
@@ -223,7 +233,9 @@ def select_channel(state: dict) -> str:
     return "none"
 ```
 
-## 6. Voice Agent (voice_agent/)
+---
+
+## Voice Agent
 
 ### Components
 
@@ -238,7 +250,7 @@ def select_channel(state: dict) -> str:
 | guardrail.py | Output sanitization |
 | utils.py | Logging, trajectory |
 
-### Call Stages (voice_agent/stages.py)
+### Call Stages
 
 ```mermaid
 stateDiagram-v2
@@ -270,7 +282,9 @@ stateDiagram-v2
 
 call_start, agent_speaking, listening, transcript, intent_detected, stage_change, escalation, guardrail_triggered, call_complete
 
-## 7. Approval Queue
+---
+
+## Approval Queue
 
 ### Status Flow
 
@@ -284,15 +298,9 @@ stateDiagram-v2
     REJECTED --> [*]
 ```
 
-### Endpoints
+---
 
-| Endpoint | Description |
-|----------|------------|
-| POST /pending-approvals/{id}/approve | Approve (voice returns should_stream=true) |
-| POST /pending-approvals/{id}/reject | Reject with reason |
-| GET /voice/execute/{id} | SSE voice execution |
-
-## 8. Database Schema (pipeline/postgre_schema.sql)
+## Database Schema
 
 ### ERD
 
@@ -404,7 +412,9 @@ channel, message_preview, voice_script_preview, status,
 approved_by, approved_at, rejected_by, rejection_reason
 ```
 
-## 9. State Definition (graph/state.py)
+---
+
+## State Definition
 
 ```python
 class Main_context(TypedDict):
@@ -461,7 +471,9 @@ class voice_result(TypedDict):
     call_memory: dict
 ```
 
-## 10. API Endpoints (app/api.py)
+---
+
+## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -478,7 +490,9 @@ class voice_result(TypedDict):
 | /voice/execute/{id} | GET | SSE call |
 | /stream | GET | SSE stream |
 
-## 11. Configuration
+---
+
+## Configuration
 
 ### Environment Variables
 
@@ -495,7 +509,9 @@ class voice_result(TypedDict):
 | GROQ_API_KEY | - |
 | CEREBRAS_API_KEY | - |
 
-## 12. Docker Services
+---
+
+## Docker Services
 
 ```yaml
 services:

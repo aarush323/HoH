@@ -2,36 +2,38 @@
 
 A multi-agent pre-delinquency detection and intervention system. Predicts customer payment stress using ensemble ML (LightGBM + GRU), analyzes via LangGraph agent orchestration, and executes proactive outreach through real-time voice calls.
 
-## Architecture
+---
+
+## Architecture Overview
 
 ```mermaid
 flowchart LR
-    subgraph Ingest["Ingestion"]
+    subgraph Ingest["📥 Ingestion"]
         Kafka[Kafka Topic<br/>customer-weekly-observations]
         Producer[producer.py]
         Consumer[consumer.py<br/>Rule Engine]
     end
 
-    subgraph ML["ML Engine"]
+    subgraph ML["🤖 ML Engine"]
         Ensemble[Ensemble<br/>LightGBM + GRU]
         SHAP[SHAP<br/>Explainability]
     end
 
-    subgraph Agents["LangGraph Agents"]
+    subgraph Agents["🧠 LangGraph Agents"]
         Analyst[analyst_node]
         Compliance[agent2_compliance<br/>Compliance Node]
         Intervention[intervention_agent]
         VoicePrep[voice_prep_node]
     end
 
-    subgraph Channel["Channel Dispatch"]
+    subgraph Channel["📞 Channel Dispatch"]
         Routing[select_channel]
         Voice[Voice Agent<br/>voice_agent/]
         WA[WhatsApp]
         Email[Email]
     end
 
-    subgraph Store["Storage"]
+    subgraph Store["💾 Storage"]
         PG[(PostgreSQL)]
         Redis[(Redis)]
         Cas[(Cassandra)]
@@ -51,6 +53,8 @@ flowchart LR
     Voice -.-> PG
     Ensemble -.-> PG
 ```
+
+---
 
 ## Key Features
 
@@ -121,6 +125,8 @@ flowchart TD
 - Voice calls execute after approval via SSE stream
 - Status: PENDING -> APPROVED -> EXECUTED
 
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -133,6 +139,8 @@ flowchart TD
 | Database | PostgreSQL, Redis, Cassandra |
 | Frontend | React + TypeScript + Vite |
 | Voice | gTTS, SpeechRecognition |
+
+---
 
 ## Setup
 
@@ -159,6 +167,8 @@ uvicorn app.api:app --host 0.0.0.0 --port 8000
 # Frontend (optional)
 cd frontend && npm install && npm run dev
 ```
+
+---
 
 ## Project Structure
 
@@ -199,6 +209,8 @@ HoH/
         └── hooks/   # useVoiceStream (SSE)
 ```
 
+---
+
 ## Data Flow
 
 ```mermaid
@@ -231,7 +243,9 @@ flowchart TD
     D -.-> I
 ```
 
-## LangGraph State (graph/state.py)
+---
+
+## LangGraph State
 
 ```python
 class Main_context(TypedDict):
@@ -255,6 +269,8 @@ class Main_context(TypedDict):
     voice_result: Optional[voice_result]
 ```
 
+---
+
 ## API Endpoints
 
 | Endpoint | Method | Description |
@@ -270,7 +286,9 @@ class Main_context(TypedDict):
 | `/voice/execute/{id}` | GET | SSE voice call stream |
 | `/stream` | GET | SSE live data stream |
 
-## Trigger Thresholds (pipeline/consumer.py)
+---
+
+## Trigger Thresholds
 
 | Rule | Threshold |
 |------|-----------|
@@ -281,7 +299,9 @@ class Main_context(TypedDict):
 | emi_bounced_flag | == True |
 | missed_emi_count_rolling | >= 2 |
 
-## Hard Stop Conditions (graph/nodes.py)
+---
+
+## Hard Stop Conditions
 
 | Flag | Description |
 |------|-------------|
@@ -289,6 +309,8 @@ class Main_context(TypedDict):
 | legal_npa_flag | Legal NPA classification |
 | existing_restructuring | Already in restructuring |
 | kyc_lapsed | KYC documents expired |
+
+---
 
 ## Intervention Rankings by Stress Type
 
@@ -311,7 +333,9 @@ flowchart LR
     end
 ```
 
-## Voice Call Stages (voice_agent/stages.py)
+---
+
+## Voice Call Stages
 
 ```mermaid
 stateDiagram-v2
@@ -321,7 +345,7 @@ stateDiagram-v2
     tips_presented --> [*]
 ```
 
-## Voice Outcomes (voice_agent/utils.py)
+## Voice Outcomes
 
 | Outcome | Escalate | Description |
 |---------|----------|-------------|
@@ -331,7 +355,9 @@ stateDiagram-v2
 | escalated | True | Urgent issue |
 | no_call_needed | False | Monitor only |
 
-## Database Tables (pipeline/postgre_schema.sql)
+---
+
+## Database Tables
 
 - customers
 - weekly_features
