@@ -326,3 +326,47 @@ export interface RejectResponse {
     reason: string;
     error?: string;
 }
+
+export interface StressContext {
+    narrative: string;
+    stress_type: string;
+    severity: string;
+    recommended_action: string;
+}
+
+export interface ShapFactor {
+    feature: string;
+    value: number;
+    contribution: number;
+    direction: string;
+}
+
+export interface PipelineDetails {
+    risk_score: number;
+    risk_level: string;
+    lgb_p?: number;
+    gru_p?: number;
+    ensemble_score?: number;
+    top_factors: ShapFactor[];
+    stress_context: StressContext;
+    intervention: {
+        method: string;
+        channel: string;
+        message: string;
+        justification: string;
+    };
+    compliance: {
+        hard_stop: boolean;
+        hard_stop_reason?: string | null;
+        eligible_interventions: string[];
+    };
+}
+
+export interface PipelineEvent {
+    customer_id: string;
+    stage: string;
+    week?: string;
+    triggered?: boolean;
+    risk_score?: number;
+    pipeline_details?: PipelineDetails;
+}

@@ -4,7 +4,6 @@ import wave
 import logging
 import collections
 import numpy as np
-import sounddevice as sd
 from pydub import AudioSegment
 
 logger = logging.getLogger(__name__)
@@ -24,6 +23,13 @@ def listen() -> str:
     Uses a robust VAD with pre-roll buffer to prevent cutoff and false starts.
     Returns path to a temporary wav file.
     """
+    try:
+        import sounddevice as sd
+    except OSError as e:
+        raise RuntimeError(
+            "Microphone capture unavailable (PortAudio/sounddevice not installed)"
+        ) from e
+
     logger.info("Listening...")
     print("\n [Listening... Speak now]")
 

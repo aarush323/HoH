@@ -16,10 +16,25 @@ try:
 except Exception as e:
     logger.error(f"Failed to initialize pygame mixer: {e}")
 
-client = Groq()
+_groq_client = None
+
+
+def _groq_client_or_none():
+    global _groq_client
+    if _groq_client is not None:
+        return _groq_client
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        return None
+    _groq_client = Groq(api_key=api_key)
+    return _groq_client
 
 
 def _groq_tts(text: str, temp_file: str) -> bool:
+    client = _groq_client_or_none()
+    if client is None:
+        logger.warning("GROQ_API_KEY not set; skipping Groq TTS")
+        return False
     try:
         response = client.audio.speech.create(
             model="canopylabs/orpheus-v1-english",

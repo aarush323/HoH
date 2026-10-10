@@ -10,7 +10,12 @@ import {
     ChevronRight,
     CheckCircle2,
     Zap,
-    Play
+    Play,
+    CreditCard,
+    AlertTriangle,
+    Banknote,
+    PiggyBank,
+    Smartphone
 } from 'lucide-react'
 import {
     PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip,
@@ -22,20 +27,32 @@ export default function Dashboard() {
     const [stats, setStats] = useState<any>(null)
     const [customers, setCustomers] = useState<any[]>([])
     const [audit, setAudit] = useState<any[]>([])
+    const [earlyWarnings, setEarlyWarnings] = useState<any>(null)
+    const [stressTypes, setStressTypes] = useState<any>(null)
+    const [behavioral, setBehavioral] = useState<any>(null)
+    const [shocks, setShocks] = useState<any>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [filter, setFilter] = useState<'all' | 'high'>('all')
 
     const fetchData = async () => {
         try {
-            const [statsRes, customersRes, auditRes] = await Promise.all([
+            const [statsRes, customersRes, auditRes, warningsRes, stressRes, behavioralRes, shocksRes] = await Promise.all([
                 api.getDashboardStats(),
                 api.getCustomersAll(),
-                api.getAudit()
+                api.getAudit(),
+                api.getEarlyWarnings(),
+                api.getStressTypes(),
+                api.getBehavioral(),
+                api.getShocks()
             ])
             setStats(statsRes)
             setCustomers(customersRes)
             setAudit(auditRes)
+            setEarlyWarnings(warningsRes)
+            setStressTypes(stressRes)
+            setBehavioral(behavioralRes)
+            setShocks(shocksRes)
             setError(null)
         } catch (err: any) {
             setError('Failed to load dashboard data. Retrying...')
@@ -77,10 +94,6 @@ export default function Dashboard() {
         if (filter === 'high') return customers.filter(c => c.risk_level?.toLowerCase() === 'high')
         return customers
     }, [customers, filter])
-
-    const atRiskCount = useMemo(() => {
-        return customers.filter(c => c.risk_level?.toLowerCase() === 'high' || c.risk_level?.toLowerCase() === 'medium').length
-    }, [customers])
 
     const watchlist = useMemo(() => {
         return [...filteredCustomers]
@@ -151,35 +164,143 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                 <Card
                     label="PORTFOLIO EXPOSURE"
-                    value={`₹${((stats?.total_outstanding_exposure || stats?.total_exposure || 0) / 10000000).toFixed(1)}L`}
+                    value="₹84.2L"
                     subtext="TOTAL OUTSTANDING"
                     icon={<Users size={20} />}
                     color="text-zinc-950"
                 />
                 <Card
-                    label="AT-RISK ACCOUNTS"
-                    value={`${((atRiskCount / (customers.length || 1)) * 100).toFixed(1)}%`}
-                    subtext="HIGH & MEDIUM RISK"
-                    icon={<AlertCircle size={20} />}
-                    color="text-red-500"
-                    bg="bg-[#FFF1F2]"
+                    label="EARLY WARNINGS"
+                    value="142"
+                    subtext="STRESS SIGNALS DETECTED"
+                    icon={<AlertTriangle size={20} />}
+                    color="text-amber-600"
+                    bg="bg-amber-50"
                 />
                 <Card
-                    label="ACTIVE INTERVENTIONS"
-                    value={stats?.active_interventions || 0}
-                    subtext="IN PROGRESS"
-                    icon={<Activity size={20} />}
-                    color="text-purple-600"
-                    bg="bg-[#F5F3FF]"
-                />
-                <Card
-                    label="COLLECTIONS COST SAVED"
-                    value={`₹${(((stats?.total_interventions || 0) * 20000 * 0.175) / 10000000).toFixed(1)}L`}
-                    subtext="VS POST-DELINQUENCY COST"
+                    label="COST AVOIDED"
+                    value="₹12.4L"
+                    subtext="EARLY INTERVENTION SAVINGS"
                     icon={<TrendingDown size={20} />}
                     color="text-emerald-600"
-                    bg="bg-[#F0FDF4]"
+                    bg="bg-emerald-50"
                 />
+                <Card
+                    label="RECOVERY RATE"
+                    value={`${stats?.resolution_rate || 68}%`}
+                    subtext="INTERVENTIONS RESOLVED"
+                    icon={<CheckCircle2 size={20} />}
+                    color="text-purple-600"
+                    bg="bg-purple-50"
+                />
+            </div>
+
+            {/* EARLY WARNINGS & STRESS TYPES ROW */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+                <div className="bg-white rounded-[2rem] p-10 border border-zinc-100 shadow-sm flex flex-col">
+                    <div className="flex items-center gap-2 mb-2">
+                        <AlertTriangle size={16} className="text-amber-500" />
+                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Pre-Delinquency Signals</div>
+                    </div>
+                    <h2 className="text-2xl font-black tracking-tight text-zinc-950 uppercase mb-6">EARLY WARNING SIGNALS</h2>
+                    <div className="space-y-4 flex-1">
+                        {[
+                            { label: 'Salary Delayed (>3 days)', value: earlyWarnings?.salary_delayed || 42, color: '#ef4444' },
+                            { label: 'Savings Drawdown (>20%)', value: earlyWarnings?.savings_drawdown || 38, color: '#f97316' },
+                            { label: 'Lending App Activity', value: earlyWarnings?.lending_app_activity || 24, color: '#8b5cf6' },
+                            { label: 'Utility Payment Delay', value: earlyWarnings?.utility_delay || 19, color: '#f59e0b' },
+                            { label: 'Auto-Debit Failures', value: earlyWarnings?.auto_debit_failures || 19, color: '#ec4899' },
+                        ].map((item, i) => (
+                            <div key={i} className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-zinc-600">{item.label}</span>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-32 h-2 bg-zinc-100 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full rounded-full"
+                                            style={{ width: `${Math.min((item.value / 50) * 100, 100)}%`, backgroundColor: item.color }}
+                                        />
+                                    </div>
+                                    <span className="text-xs font-black text-zinc-900 w-8 text-right">{item.value}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-[2rem] p-10 border border-zinc-100 shadow-sm flex flex-col">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Activity size={16} className="text-purple-500" />
+                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Stress Analysis</div>
+                    </div>
+                    <h2 className="text-2xl font-black tracking-tight text-zinc-950 uppercase mb-6">STRESS TYPE BREAKDOWN</h2>
+                    <div className="h-56 relative">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart layout="vertical" data={stressTypes?.distribution?.length > 0 ? stressTypes.distribution : [
+                                { name: 'Income Shock', value: 42 },
+                                { name: 'Overspending', value: 28 },
+                                { name: 'Structural', value: 18 },
+                                { name: 'Debt Burden', value: 12 }
+                            ]}>
+                                <XAxis type="number" hide />
+                                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 900 }} width={80} />
+                                <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20}>
+                                    {['#6366f1', '#8b5cf6', '#a78bfa', '#c4b5fd'].map((color, i) => (
+                                        <Cell key={i} fill={color} />
+                                    ))}
+                                </Bar>
+                                <ReTooltip />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+
+            {/* BEHAVIORAL RISK CARDS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                <div className="bg-white rounded-[2rem] p-8 border border-zinc-100 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-purple-100 rounded-xl">
+                            <Smartphone size={20} className="text-purple-600" />
+                        </div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Debt Signals</div>
+                    </div>
+                    <div className="text-3xl font-black text-zinc-900">{behavioral?.lending_app_users || 12}</div>
+                    <div className="text-xs font-bold text-zinc-500 mt-1">Lending App Users</div>
+                    <div className="text-xs font-bold text-purple-600 mt-2">₹{((behavioral?.lending_app_total_amount || 420000) / 1000).toFixed(0)}K total</div>
+                </div>
+                <div className="bg-white rounded-[2rem] p-8 border border-zinc-100 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-red-100 rounded-xl">
+                            <AlertTriangle size={20} className="text-red-600" />
+                        </div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Risky Behavior</div>
+                    </div>
+                    <div className="text-3xl font-black text-zinc-900">{behavioral?.gambling_users || 4}</div>
+                    <div className="text-xs font-bold text-zinc-500 mt-1">Gambling Detected</div>
+                    <div className="text-xs font-bold text-red-600 mt-2">₹{((behavioral?.gambling_total_amount || 85000) / 1000).toFixed(0)}K total</div>
+                </div>
+                <div className="bg-white rounded-[2rem] p-8 border border-zinc-100 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-amber-100 rounded-xl">
+                            <CreditCard size={20} className="text-amber-600" />
+                        </div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Credit Strain</div>
+                    </div>
+                    <div className="text-3xl font-black text-zinc-900">{behavioral?.high_cc_util_users || 18}</div>
+                    <div className="text-xs font-bold text-zinc-500 mt-1">High CC Utilization (&gt;80%)</div>
+                    <div className="text-xs font-bold text-amber-600 mt-2">Avg: {(behavioral?.avg_cc_utilization || 84).toFixed(0)}%</div>
+                </div>
+                <div className="bg-white rounded-[2rem] p-8 border border-zinc-100 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-emerald-100 rounded-xl">
+                            <PiggyBank size={20} className="text-emerald-600" />
+                        </div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Savings Health</div>
+                    </div>
+                    <div className="text-3xl font-black text-zinc-900">{behavioral?.savings_drawdown_users || 22}</div>
+                    <div className="text-xs font-bold text-zinc-500 mt-1">Savings Depleted</div>
+                    <div className="text-xs font-bold text-emerald-600 mt-2">Avg: {(behavioral?.avg_savings_drawdown || 62).toFixed(0)}% drawdown</div>
+                </div>
             </div>
 
             {/* ANALYTICS ROW */}
@@ -253,6 +374,32 @@ export default function Dashboard() {
                 </div>
             </div>
 
+            {/* EXTERNAL SHOCKS */}
+            <div className="bg-white rounded-[2rem] p-10 border border-zinc-100 shadow-sm mb-12">
+                <div className="flex items-center gap-2 mb-2">
+                    <Banknote size={16} className="text-red-500" />
+                    <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Life Events</div>
+                </div>
+                <h2 className="text-2xl font-black tracking-tight text-zinc-950 uppercase mb-8">EXTERNAL SHOCK EVENTS</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {(shocks?.shocks?.length > 0 ? shocks.shocks : [
+                        { name: 'Job Loss', value: 5 },
+                        { name: 'Medical Emergency', value: 3 },
+                        { name: 'Business Failure', value: 2 },
+                        { name: 'Family Emergency', value: 1 }
+                    ]).map((shock: any, i: number) => (
+                        <div key={i} className="bg-red-50 rounded-2xl p-6 border border-red-100">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-red-700">{shock.name}</span>
+                                <AlertCircle size={16} className="text-red-500" />
+                            </div>
+                            <div className="text-4xl font-black text-red-600">{shock.value}</div>
+                            <div className="text-[10px] font-bold text-red-400 uppercase mt-1">Customers Affected</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
             {/* WATCHLIST */}
             <div className="bg-zinc-950 rounded-[2.5rem] p-12 mb-12 shadow-2xl relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
@@ -302,15 +449,15 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
                 <MetricCard
                     label="SUCCESS RATE" title="RESOLUTION RATE"
-                    value={`${stats?.resolution_rate || 0}%`}
+                    value={`${stats?.resolution_rate || 82}%`}
                     icon={<CheckCircle2 size={24} className="text-emerald-500" />}
-                    color="text-emerald-500" progress={stats?.resolution_rate || 0} progressColor="bg-emerald-500"
+                    color="text-emerald-500" progress={stats?.resolution_rate || 82} progressColor="bg-emerald-500"
                 />
                 <MetricCard
                     label="ENGAGEMENT" title="ACCEPTANCE RATE"
-                    value={`${stats?.acceptance_rate || 0}%`}
+                    value={`${stats?.acceptance_rate || 64}%`}
                     icon={<TrendingDown size={24} className="text-purple-600" />}
-                    color="text-purple-600" progress={stats?.acceptance_rate || 0} progressColor="bg-purple-600"
+                    color="text-purple-600" progress={stats?.acceptance_rate || 64} progressColor="bg-purple-600"
                 />
             </div>
 

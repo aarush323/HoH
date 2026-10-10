@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { createEventSource } from '../api/client';
-import type { CustomerSummary } from '../types';
+import type { CustomerSummary, PipelineDetails } from '../types';
 
 interface LiveFeedContextType {
     customers: CustomerSummary[];
+    pipelineDetails: Record<string, PipelineDetails>;
     eventCount: number;
     lastUpdate: Date | null;
     connected: boolean;
@@ -13,6 +14,7 @@ const LiveFeedContext = createContext<LiveFeedContextType | undefined>(undefined
 
 export const LiveFeedProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [customers, setCustomers] = useState<CustomerSummary[]>([]);
+    const [pipelineDetails, setPipelineDetails] = useState<Record<string, PipelineDetails>>({});
     const [eventCount, setEventCount] = useState(0);
     const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
     const [connected, setConnected] = useState(false);
@@ -34,6 +36,12 @@ export const LiveFeedProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     setEventCount(payload.total_events || 0);
                     setLastUpdate(new Date());
                 }
+                if (payload.pipeline_details && payload.customer_id) {
+                    setPipelineDetails(prev => ({
+                        ...prev,
+                        [payload.customer_id]: payload.pipeline_details
+                    }));
+                }
             } catch (err) {
                 console.error('SSE Parse Error:', err);
             }
@@ -52,7 +60,7 @@ export const LiveFeedProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, []);
 
     return (
-        <LiveFeedContext.Provider value={{ customers, eventCount, lastUpdate, connected }}>
+        <LiveFeedContext.Provider value={{ customers, pipelineDetails, eventCount, lastUpdate, connected }}>
             {children}
         </LiveFeedContext.Provider>
     );

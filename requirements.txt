@@ -20,6 +20,9 @@ numpy
 scikit-learn
 lightgbm
 shap
+joblib
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
 
 # Streaming & Pipeline
 kafka-python

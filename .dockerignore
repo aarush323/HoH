@@ -1,0 +1,9 @@
+.git
+.axolotl
+frontend/node_modules
+frontend/dist
+**/__pycache__
+**/*.pyc
+.env
+*.log
+agent_output_fallback.log
